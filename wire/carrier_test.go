@@ -18,8 +18,7 @@ func TestProtobufCarrier(t *testing.T) {
 	carrier.SetBaggageItem(baggageKey, expVal)
 	gotTraceID, gotSpanID, gotParentSpanId, gotSampled := carrier.State()
 	if traceID != gotTraceID || spanID != gotSpanID || parentSpanID != gotParentSpanId || sampled != gotSampled {
-		t.Errorf("Wanted state %d %d %d %t, got %d %d %d %t", spanID, traceID, parentSpanID, sampled,
-			gotTraceID, gotSpanID, gotSampled)
+		t.Errorf("Wanted state %d %d %d %t, got %d %d %d %t", spanID, traceID, parentSpanID, sampled, gotTraceID, gotSpanID, gotParentSpanId, gotSampled)
 	}
 
 	gotBaggage := map[string]string{}

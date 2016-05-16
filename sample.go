@@ -1,4 +1,4 @@
-package zipkin
+package zipkintracer
 
 import (
 	"math"
@@ -14,6 +14,16 @@ type Sampler func(id uint64) bool
 func neverSample(_ uint64) bool { return false }
 
 func alwaysSample(_ uint64) bool { return true }
+
+// ModuloSampler provides a typical OpenTracing type Sampler.
+func ModuloSampler(mod uint64) Sampler {
+	if mod < 2 {
+		return alwaysSample
+	}
+	return func(id uint64) bool {
+		return (id % mod) == 0
+	}
+}
 
 // NewBoundarySampler is appropriate for high-traffic instrumentation who
 // provision random trace ids, and make the sampling decision only once.

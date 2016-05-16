@@ -1,4 +1,4 @@
-package zipkin
+package zipkintracer
 
 import (
 	"encoding/base64"
@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"git.apache.org/thrift.git/lib/go/thrift"
+
 	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/scribe"
+	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 const defaultScribeCategory = "zipkin"
@@ -20,7 +22,7 @@ const defaultBatchInterval = 1
 type ScribeCollector struct {
 	client        scribe.Scribe
 	factory       func() (scribe.Scribe, error)
-	spanc         chan *Span
+	spanc         chan *zipkincore.Span
 	sendc         chan struct{}
 	batch         []*scribe.LogEntry
 	nextSend      time.Time
@@ -46,7 +48,7 @@ func NewScribeCollector(addr string, timeout time.Duration, options ...ScribeOpt
 	c := &ScribeCollector{
 		client:        client,
 		factory:       factory,
-		spanc:         make(chan *Span),
+		spanc:         make(chan *zipkincore.Span),
 		sendc:         make(chan struct{}),
 		batch:         []*scribe.LogEntry{},
 		batchInterval: defaultBatchInterval * time.Second,
@@ -64,7 +66,7 @@ func NewScribeCollector(addr string, timeout time.Duration, options ...ScribeOpt
 }
 
 // Collect implements Collector.
-func (c *ScribeCollector) Collect(s *Span) error {
+func (c *ScribeCollector) Collect(s *zipkincore.Span) error {
 	c.spanc <- s
 	return nil // accepted
 }
@@ -172,10 +174,10 @@ func scribeClientFactory(addr string, timeout time.Duration) func() (scribe.Scri
 	}
 }
 
-func scribeSerialize(s *Span) string {
+func scribeSerialize(s *zipkincore.Span) string {
 	t := thrift.NewTMemoryBuffer()
 	p := thrift.NewTBinaryProtocolTransport(t)
-	if err := s.Span.Write(p); err != nil {
+	if err := s.Write(p); err != nil {
 		panic(err)
 	}
 	return base64.StdEncoding.EncodeToString(t.Buffer.Bytes())

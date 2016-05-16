@@ -1,4 +1,4 @@
-package zipkin
+package zipkintracer
 
 import (
 	"errors"

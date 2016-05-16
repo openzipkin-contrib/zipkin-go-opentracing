@@ -1,4 +1,4 @@
-package zipkin_test
+package zipkintracer_test
 
 import (
 	"testing"

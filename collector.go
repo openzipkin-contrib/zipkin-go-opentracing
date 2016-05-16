@@ -1,11 +1,15 @@
-package zipkin
+package zipkintracer
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+)
 
 // Collector represents a Zipkin trace collector, which is probably a set of
 // remote endpoints.
 type Collector interface {
-	Collect(*Span) error
+	Collect(*zipkincore.Span) error
 	Close() error
 }
 
@@ -13,7 +17,7 @@ type Collector interface {
 type NopCollector struct{}
 
 // Collect implements Collector.
-func (NopCollector) Collect(*Span) error { return nil }
+func (NopCollector) Collect(*zipkincore.Span) error { return nil }
 
 // Close implements Collector.
 func (NopCollector) Close() error { return nil }
@@ -22,7 +26,7 @@ func (NopCollector) Close() error { return nil }
 type MultiCollector []Collector
 
 // Collect implements Collector.
-func (c MultiCollector) Collect(s *Span) error {
+func (c MultiCollector) Collect(s *zipkincore.Span) error {
 	return c.aggregateErrors(func(coll Collector) error { return coll.Collect(s) })
 }
 

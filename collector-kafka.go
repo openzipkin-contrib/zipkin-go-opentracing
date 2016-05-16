@@ -1,8 +1,10 @@
-package zipkin
+package zipkintracer
 
 import (
 	"git.apache.org/thrift.git/lib/go/thrift"
 	"gopkg.in/Shopify/sarama.v1"
+
+	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 // defaultKafkaTopic sets the standard Kafka topic our Collector will publish
@@ -69,7 +71,7 @@ func (c *KafkaCollector) logErrors() {
 }
 
 // Collect implements Collector.
-func (c *KafkaCollector) Collect(s *Span) error {
+func (c *KafkaCollector) Collect(s *zipkincore.Span) error {
 	c.producer.Input() <- &sarama.ProducerMessage{
 		Topic: c.topic,
 		Key:   nil,
@@ -83,10 +85,10 @@ func (c *KafkaCollector) Close() error {
 	return c.producer.Close()
 }
 
-func kafkaSerialize(s *Span) []byte {
+func kafkaSerialize(s *zipkincore.Span) []byte {
 	t := thrift.NewTMemoryBuffer()
 	p := thrift.NewTBinaryProtocolTransport(t)
-	if err := s.Span.Write(p); err != nil {
+	if err := s.Write(p); err != nil {
 		panic(err)
 	}
 	return t.Buffer.Bytes()

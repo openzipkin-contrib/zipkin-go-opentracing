@@ -1,16 +1,18 @@
-package zipkin_test
+package zipkintracer_test
 
 import (
 	"fmt"
 	"testing"
+	"time"
 
-	zipkin "github.com/basvanbeek/zipkin-go-opentracing"
+	zipkintracer "github.com/basvanbeek/zipkin-go-opentracing"
+	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
-var s = zipkin.NewSpan("203.0.113.10:1234", "service1", "avg", 123, 456, 0, true)
+var s = makeNewSpan("203.0.113.10:1234", "service1", "avg", 123, 456, 0, true)
 
 func TestNopCollector(t *testing.T) {
-	c := zipkin.NopCollector{}
+	c := zipkintracer.NopCollector{}
 	if err := c.Collect(s); err != nil {
 		t.Error(err)
 	}
@@ -25,15 +27,13 @@ type stubCollector struct {
 	closed    bool
 }
 
-func (c *stubCollector) Collect(*zipkin.Span) error {
+func (c *stubCollector) Collect(*zipkincore.Span) error {
 	c.collected = true
 	if c.errid != 0 {
 		return fmt.Errorf("error %d", c.errid)
 	}
 	return nil
 }
-
-func (c *stubCollector) ShouldSample(*zipkin.Span) bool { return true }
 
 func (c *stubCollector) Close() error {
 	c.closed = true
@@ -44,7 +44,7 @@ func (c *stubCollector) Close() error {
 }
 
 func TestMultiCollector(t *testing.T) {
-	cs := zipkin.MultiCollector{
+	cs := zipkintracer.MultiCollector{
 		&stubCollector{errid: 1},
 		&stubCollector{},
 		&stubCollector{errid: 2},
@@ -56,7 +56,7 @@ func TestMultiCollector(t *testing.T) {
 	if want, have := "error 1; error 2", err.Error(); want != have {
 		t.Errorf("want %q, have %q", want, have)
 	}
-	collectionError := err.(zipkin.CollectionError).GetErrors()
+	collectionError := err.(zipkintracer.CollectionError).GetErrors()
 	if want, have := 3, len(collectionError); want != have {
 		t.Fatalf("want %d, have %d", want, have)
 	}
@@ -78,7 +78,7 @@ func TestMultiCollector(t *testing.T) {
 }
 
 func TestMultiCollectorClose(t *testing.T) {
-	cs := zipkin.MultiCollector{
+	cs := zipkintracer.MultiCollector{
 		&stubCollector{errid: 1},
 		&stubCollector{},
 		&stubCollector{errid: 2},
@@ -95,5 +95,17 @@ func TestMultiCollectorClose(t *testing.T) {
 		if !c.(*stubCollector).closed {
 			t.Error("close not called")
 		}
+	}
+}
+
+func makeNewSpan(hostPort, serviceName, methodName string, traceID, spanID, parentSpanID int64, debug bool) *zipkincore.Span {
+	timestamp := time.Now().UnixNano() / 1e3
+	return &zipkincore.Span{
+		TraceID:   traceID,
+		Name:      methodName,
+		ID:        spanID,
+		ParentID:  &parentSpanID,
+		Debug:     debug,
+		Timestamp: &timestamp,
 	}
 }

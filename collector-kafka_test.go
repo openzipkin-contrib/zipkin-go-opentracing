@@ -1,4 +1,4 @@
-package zipkin_test
+package zipkintracer_test
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 	"git.apache.org/thrift.git/lib/go/thrift"
 	"gopkg.in/Shopify/sarama.v1"
 
-	"github.com/basvanbeek/zipkin-go-opentracing"
+	zipkintracer "github.com/basvanbeek/zipkin-go-opentracing"
 	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
@@ -40,16 +40,16 @@ func newStubProducer(kdown bool) *stubProducer {
 	}
 }
 
-var spans = []*zipkin.Span{
-	zipkin.NewSpan("203.0.113.10:1234", "service1", "avg", 123, 456, 0, true),
-	zipkin.NewSpan("203.0.113.10:1234", "service2", "sum", 123, 789, 456, true),
-	zipkin.NewSpan("203.0.113.10:1234", "service2", "div", 123, 101112, 456, true),
+var spans = []*zipkincore.Span{
+	makeNewSpan("203.0.113.10:1234", "service1", "avg", 123, 456, 0, true),
+	makeNewSpan("203.0.113.10:1234", "service2", "sum", 123, 789, 456, true),
+	makeNewSpan("203.0.113.10:1234", "service2", "div", 123, 101112, 456, true),
 }
 
 func TestKafkaProduce(t *testing.T) {
 	p := newStubProducer(false)
-	c, err := zipkin.NewKafkaCollector(
-		[]string{"192.0.2.10:9092"}, zipkin.KafkaProducer(p),
+	c, err := zipkintracer.NewKafkaCollector(
+		[]string{"192.0.2.10:9092"}, zipkintracer.KafkaProducer(p),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -65,8 +65,8 @@ func TestKafkaProduce(t *testing.T) {
 
 func TestKafkaClose(t *testing.T) {
 	p := newStubProducer(false)
-	c, err := zipkin.NewKafkaCollector(
-		[]string{"192.0.2.10:9092"}, zipkin.KafkaProducer(p),
+	c, err := zipkintracer.NewKafkaCollector(
+		[]string{"192.0.2.10:9092"}, zipkintracer.KafkaProducer(p),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -81,8 +81,8 @@ func TestKafkaClose(t *testing.T) {
 
 func TestKafkaCloseError(t *testing.T) {
 	p := newStubProducer(true)
-	c, err := zipkin.NewKafkaCollector(
-		[]string{"192.0.2.10:9092"}, zipkin.KafkaProducer(p),
+	c, err := zipkintracer.NewKafkaCollector(
+		[]string{"192.0.2.10:9092"}, zipkintracer.KafkaProducer(p),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestKafkaCloseError(t *testing.T) {
 func TestKafkaErrors(t *testing.T) {
 	p := newStubProducer(true)
 	errs := make(chan []interface{}, len(spans))
-	lg := zipkin.Logger(zipkin.LoggerFunc(func(keyvals ...interface{}) error {
+	lg := zipkintracer.Logger(zipkintracer.LoggerFunc(func(keyvals ...interface{}) error {
 		for i := 0; i < len(keyvals); i += 2 {
 			if keyvals[i] == "result" && keyvals[i+1] == "failed to produce msg" {
 				errs <- keyvals
@@ -103,10 +103,10 @@ func TestKafkaErrors(t *testing.T) {
 		}
 		return nil
 	}))
-	c, err := zipkin.NewKafkaCollector(
+	c, err := zipkintracer.NewKafkaCollector(
 		[]string{"192.0.2.10:9092"},
-		zipkin.KafkaProducer(p),
-		zipkin.KafkaLogger(lg),
+		zipkintracer.KafkaProducer(p),
+		zipkintracer.KafkaLogger(lg),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +124,7 @@ func TestKafkaErrors(t *testing.T) {
 	}
 }
 
-func collectSpan(t *testing.T, c zipkin.Collector, p *stubProducer, s *zipkin.Span) *sarama.ProducerMessage {
+func collectSpan(t *testing.T, c zipkintracer.Collector, p *stubProducer, s *zipkincore.Span) *sarama.ProducerMessage {
 	var m *sarama.ProducerMessage
 	rcvd := make(chan bool, 1)
 	go func() {
@@ -174,18 +174,18 @@ func deserializeSpan(t *testing.T, e sarama.Encoder) *zipkincore.Span {
 	return s
 }
 
-func testEqual(t *testing.T, want *zipkin.Span, got *zipkincore.Span) {
-	if got.TraceID != want.Span.TraceID {
-		t.Errorf("trace_id %d, want %d", got.TraceID, want.Span.TraceID)
+func testEqual(t *testing.T, want *zipkincore.Span, got *zipkincore.Span) {
+	if got.TraceID != want.TraceID {
+		t.Errorf("trace_id %d, want %d", got.TraceID, want.TraceID)
 	}
-	if got.ID != want.Span.ID {
-		t.Errorf("id %d, want %d", got.ID, want.Span.ID)
+	if got.ID != want.ID {
+		t.Errorf("id %d, want %d", got.ID, want.ID)
 	}
 	if got.ParentID == nil {
-		if want.Span.ParentID != nil {
-			t.Errorf("parent_id %d, want %d", got.ParentID, want.Span.ParentID)
+		if want.ParentID != nil {
+			t.Errorf("parent_id %d, want %d", got.ParentID, want.ParentID)
 		}
-	} else if *got.ParentID != *want.Span.ParentID {
-		t.Errorf("parent_id %d, want %d", got.ParentID, want.Span.ParentID)
+	} else if *got.ParentID != *want.ParentID {
+		t.Errorf("parent_id %d, want %d", got.ParentID, want.ParentID)
 	}
 }

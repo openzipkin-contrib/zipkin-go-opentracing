@@ -1,2 +1,3 @@
-# go-opentracing-zipkin
-OpenTracing Tracer implementation for Zipkin in Go
+# zipkin-go-opentracing
+
+OpenTracing Tracer implementation for Zipkin in Go.

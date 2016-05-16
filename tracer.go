@@ -24,7 +24,8 @@ type config struct {
 	Endpoint           *zipkincore.Endpoint
 }
 
-// Option allows for
+// Option allows for functional options.
+// See: http://dave.cheney.net/2014/10/17/functional-options-for-friendly-apis
 type Option func(c *config) error
 
 // NewTracer creates a new opentracing.Tracer that records spans to the given

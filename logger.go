@@ -23,7 +23,7 @@ func NewNopLogger() Logger {
 }
 
 // LogWrapper wraps a standard library logger into a Logger compatible with this
-// package
+// package.
 func LogWrapper(l *log.Logger) Logger {
 	return &wrappedLogger{l: l}
 }

@@ -47,7 +47,7 @@ func NewCountingSampler(rate float64) Sampler {
 	}
 	var (
 		i         = 0
-		outOf100  = int(rate*100 + math.Copysign(0.5, rate*100))
+		outOf100  = int(rate*100 + math.Copysign(0.5, rate*100)) // for rounding float to int conversion instead of truncation
 		decisions = randomBitSet(100, outOf100, rand.New(rand.NewSource(time.Now().UnixNano())))
 		mtx       = &sync.Mutex{}
 	)

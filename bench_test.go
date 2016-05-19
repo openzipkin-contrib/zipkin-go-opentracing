@@ -32,7 +32,7 @@ func executeOps(sp opentracing.Span, numEvent, numTag, numItems int) {
 
 func benchmarkWithOps(b *testing.B, numEvent, numTag, numItems int) {
 	var r CountingRecorder
-	t, err := NewTracer(WithRecorder(&r))
+	t, err := NewTracer(&r)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)
 	}
@@ -82,17 +82,17 @@ func BenchmarkSpan_100BaggageItems(b *testing.B) {
 func BenchmarkTrimmedSpan_100Events_100Tags_100BaggageItems(b *testing.B) {
 	var r CountingRecorder
 	t, err := NewTracer(
+		&r,
 		TrimUnsampledSpans(true),
 		WithSampler(neverSample),
-		WithRecorder(&r),
 	)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)
 	}
 	t, err = NewTracer(
+		&r,
 		TrimUnsampledSpans(true),
 		WithSampler(neverSample),
-		WithRecorder(&r),
 	)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)
@@ -108,7 +108,7 @@ func BenchmarkTrimmedSpan_100Events_100Tags_100BaggageItems(b *testing.B) {
 
 func benchmarkInject(b *testing.B, format opentracing.BuiltinFormat, numItems int) {
 	var r CountingRecorder
-	tracer, err := NewTracer(WithRecorder(&r))
+	tracer, err := NewTracer(&r)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)
 	}
@@ -134,7 +134,7 @@ func benchmarkInject(b *testing.B, format opentracing.BuiltinFormat, numItems in
 
 func benchmarkJoin(b *testing.B, format opentracing.BuiltinFormat, numItems int) {
 	var r CountingRecorder
-	tracer, err := NewTracer(WithRecorder(&r))
+	tracer, err := NewTracer(&r)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)
 	}

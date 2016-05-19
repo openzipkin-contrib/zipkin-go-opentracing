@@ -42,7 +42,7 @@ func TestSpanPropagator(t *testing.T) {
 	const op = "test"
 	recorder := zipkintracer.NewInMemoryRecorder()
 	tracer, err := zipkintracer.NewTracer(
-		zipkintracer.WithRecorder(recorder),
+		recorder,
 		zipkintracer.ClientServerSameSpan(true),
 	)
 	if err != nil {

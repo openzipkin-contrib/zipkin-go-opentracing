@@ -65,14 +65,6 @@ func WithLogger(logger Logger) TracerOption {
 	}
 }
 
-// WithRecorder option
-func WithRecorder(recorder SpanRecorder) TracerOption {
-	return func(opts *TracerOptions) error {
-		opts.recorder = recorder
-		return nil
-	}
-}
-
 // DebugAssertSingleGoroutine option
 func DebugAssertSingleGoroutine(val bool) TracerOption {
 	return func(opts *TracerOptions) error {
@@ -100,11 +92,11 @@ func ClientServerSameSpan(val bool) TracerOption {
 }
 
 // NewTracer creates a new OpenTracing compatible Zipkin Tracer.
-func NewTracer(options ...TracerOption) (opentracing.Tracer, error) {
+func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Tracer, error) {
 	opts := &TracerOptions{
+		recorder:             recorder,
 		shouldSample:         alwaysSample,
 		trimUnsampledSpans:   false,
-		recorder:             &Recorder{collector: NopCollector{}},
 		newSpanEventListener: func() func(SpanEvent) { return nil },
 		logger:               &nopLogger{},
 		debugAssertSingleGoroutine: false,

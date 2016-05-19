@@ -11,7 +11,7 @@ const op = "test"
 
 func TestDebugAssertSingleGoroutine(t *testing.T) {
 	tracer, err := NewTracer(
-		WithRecorder(NewInMemoryRecorder()),
+		NewInMemoryRecorder(),
 		DebugAssertSingleGoroutine(true),
 	)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestDebugAssertSingleGoroutine(t *testing.T) {
 
 func TestDebugAssertUseAfterFinish(t *testing.T) {
 	tracer, err := NewTracer(
-		WithRecorder(NewInMemoryRecorder()),
+		NewInMemoryRecorder(),
 		DebugAssertUseAfterFinish(true),
 	)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestDebugAssertUseAfterFinish(t *testing.T) {
 func TestConcurrentUsage(t *testing.T) {
 	var cr CountingRecorder
 	tracer, err := NewTracer(
-		WithRecorder(&cr),
+		&cr,
 		DebugAssertSingleGoroutine(true),
 	)
 	if err != nil {

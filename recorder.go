@@ -4,11 +4,18 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"net"
+	"strconv"
 	"time"
 
 	otext "github.com/opentracing/opentracing-go/ext"
 
 	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+)
+
+var (
+	// SpanKindResource will be regarded as a SA annotation by Zipkin.
+	SpanKindResource = otext.SpanKindEnum("resource")
 )
 
 // A SpanRecorder handles all of the `RawSpan` data generated via an
@@ -57,8 +64,7 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 		Timestamp: &timestamp,
 		Duration:  &duration,
 	}
-
-	if kind, ok := sp.Tags["span.kind"]; ok {
+	if kind, ok := sp.Tags[string(otext.SpanKind)]; ok {
 		switch kind {
 		case otext.SpanKindRPCClient:
 			Annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
@@ -66,7 +72,32 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 		case otext.SpanKindRPCServer:
 			Annotate(span, sp.Start, zipkincore.SERVER_RECV, r.endpoint)
 			Annotate(span, sp.Start.Add(sp.Duration), zipkincore.SERVER_SEND, r.endpoint)
+		case SpanKindResource:
+			serviceName, ok := sp.Tags[string(otext.PeerService)]
+			if !ok {
+				serviceName = r.endpoint.GetServiceName()
+			}
+			host, ok := sp.Tags[string(otext.PeerHostname)].(string)
+			if !ok {
+				ip := make([]byte, 4)
+				binary.BigEndian.PutUint32(ip, uint32(r.endpoint.GetIpv4()))
+				host = net.IP(ip).To4().String()
+			}
+			port, ok := sp.Tags[string(otext.PeerPort)]
+			if !ok {
+				port = strconv.FormatInt(int64(r.endpoint.GetPort()), 10)
+			} else {
+				port = strconv.FormatInt(int64(port.(uint16)), 10)
+			}
+			re := MakeEndpoint(fmt.Sprintf("%s:%s", host, port), serviceName.(string))
+			AnnotateBinary(span, zipkincore.SERVER_ADDR, serviceName, re)
+			Annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
+			Annotate(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
+		default:
+			AnnotateBinary(span, zipkincore.LOCAL_COMPONENT, r.endpoint.GetServiceName(), r.endpoint)
 		}
+	} else {
+		AnnotateBinary(span, zipkincore.LOCAL_COMPONENT, r.endpoint.GetServiceName(), r.endpoint)
 	}
 
 	for key, value := range sp.Tags {

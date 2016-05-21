@@ -1,4 +1,4 @@
-package zipkintracer_test
+package zipkintracer
 
 import (
 	"errors"
@@ -8,7 +8,6 @@ import (
 	"git.apache.org/thrift.git/lib/go/thrift"
 	"gopkg.in/Shopify/sarama.v1"
 
-	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
@@ -48,8 +47,8 @@ var spans = []*zipkincore.Span{
 
 func TestKafkaProduce(t *testing.T) {
 	p := newStubProducer(false)
-	c, err := zipkintracer.NewKafkaCollector(
-		[]string{"192.0.2.10:9092"}, zipkintracer.KafkaProducer(p),
+	c, err := NewKafkaCollector(
+		[]string{"192.0.2.10:9092"}, KafkaProducer(p),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -65,8 +64,8 @@ func TestKafkaProduce(t *testing.T) {
 
 func TestKafkaClose(t *testing.T) {
 	p := newStubProducer(false)
-	c, err := zipkintracer.NewKafkaCollector(
-		[]string{"192.0.2.10:9092"}, zipkintracer.KafkaProducer(p),
+	c, err := NewKafkaCollector(
+		[]string{"192.0.2.10:9092"}, KafkaProducer(p),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -81,8 +80,8 @@ func TestKafkaClose(t *testing.T) {
 
 func TestKafkaCloseError(t *testing.T) {
 	p := newStubProducer(true)
-	c, err := zipkintracer.NewKafkaCollector(
-		[]string{"192.0.2.10:9092"}, zipkintracer.KafkaProducer(p),
+	c, err := NewKafkaCollector(
+		[]string{"192.0.2.10:9092"}, KafkaProducer(p),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +94,7 @@ func TestKafkaCloseError(t *testing.T) {
 func TestKafkaErrors(t *testing.T) {
 	p := newStubProducer(true)
 	errs := make(chan []interface{}, len(spans))
-	lg := zipkintracer.Logger(zipkintracer.LoggerFunc(func(keyvals ...interface{}) error {
+	lg := Logger(LoggerFunc(func(keyvals ...interface{}) error {
 		for i := 0; i < len(keyvals); i += 2 {
 			if keyvals[i] == "result" && keyvals[i+1] == "failed to produce msg" {
 				errs <- keyvals
@@ -103,10 +102,10 @@ func TestKafkaErrors(t *testing.T) {
 		}
 		return nil
 	}))
-	c, err := zipkintracer.NewKafkaCollector(
+	c, err := NewKafkaCollector(
 		[]string{"192.0.2.10:9092"},
-		zipkintracer.KafkaProducer(p),
-		zipkintracer.KafkaLogger(lg),
+		KafkaProducer(p),
+		KafkaLogger(lg),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +123,7 @@ func TestKafkaErrors(t *testing.T) {
 	}
 }
 
-func collectSpan(t *testing.T, c zipkintracer.Collector, p *stubProducer, s *zipkincore.Span) *sarama.ProducerMessage {
+func collectSpan(t *testing.T, c Collector, p *stubProducer, s *zipkincore.Span) *sarama.ProducerMessage {
 	var m *sarama.ProducerMessage
 	rcvd := make(chan bool, 1)
 	go func() {

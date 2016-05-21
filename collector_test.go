@@ -1,18 +1,17 @@
-package zipkintracer_test
+package zipkintracer
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 var s = makeNewSpan("203.0.113.10:1234", "service1", "avg", 123, 456, 0, true)
 
 func TestNopCollector(t *testing.T) {
-	c := zipkintracer.NopCollector{}
+	c := NopCollector{}
 	if err := c.Collect(s); err != nil {
 		t.Error(err)
 	}
@@ -44,7 +43,7 @@ func (c *stubCollector) Close() error {
 }
 
 func TestMultiCollector(t *testing.T) {
-	cs := zipkintracer.MultiCollector{
+	cs := MultiCollector{
 		&stubCollector{errid: 1},
 		&stubCollector{},
 		&stubCollector{errid: 2},
@@ -56,7 +55,7 @@ func TestMultiCollector(t *testing.T) {
 	if want, have := "error 1; error 2", err.Error(); want != have {
 		t.Errorf("want %q, have %q", want, have)
 	}
-	collectionError := err.(zipkintracer.CollectionError).GetErrors()
+	collectionError := err.(CollectionError).GetErrors()
 	if want, have := 3, len(collectionError); want != have {
 		t.Fatalf("want %d, have %d", want, have)
 	}
@@ -78,7 +77,7 @@ func TestMultiCollector(t *testing.T) {
 }
 
 func TestMultiCollectorClose(t *testing.T) {
-	cs := zipkintracer.MultiCollector{
+	cs := MultiCollector{
 		&stubCollector{errid: 1},
 		&stubCollector{},
 		&stubCollector{errid: 2},

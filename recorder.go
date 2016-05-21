@@ -38,7 +38,7 @@ func NewRecorder(c Collector, debug bool, hostPort, serviceName string) SpanReco
 	return &Recorder{
 		collector: c,
 		debug:     debug,
-		endpoint:  MakeEndpoint(hostPort, serviceName),
+		endpoint:  makeEndpoint(hostPort, serviceName),
 	}
 }
 
@@ -67,11 +67,11 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 	if kind, ok := sp.Tags[string(otext.SpanKind)]; ok {
 		switch kind {
 		case otext.SpanKindRPCClient:
-			Annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
-			Annotate(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
+			annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
+			annotate(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
 		case otext.SpanKindRPCServer:
-			Annotate(span, sp.Start, zipkincore.SERVER_RECV, r.endpoint)
-			Annotate(span, sp.Start.Add(sp.Duration), zipkincore.SERVER_SEND, r.endpoint)
+			annotate(span, sp.Start, zipkincore.SERVER_RECV, r.endpoint)
+			annotate(span, sp.Start.Add(sp.Duration), zipkincore.SERVER_SEND, r.endpoint)
 		case SpanKindResource:
 			serviceName, ok := sp.Tags[string(otext.PeerService)]
 			if !ok {
@@ -89,33 +89,33 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 			} else {
 				port = strconv.FormatInt(int64(port.(uint16)), 10)
 			}
-			re := MakeEndpoint(fmt.Sprintf("%s:%s", host, port), serviceName.(string))
-			AnnotateBinary(span, zipkincore.SERVER_ADDR, serviceName, re)
-			Annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
-			Annotate(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
+			re := makeEndpoint(fmt.Sprintf("%s:%s", host, port), serviceName.(string))
+			annotateBinary(span, zipkincore.SERVER_ADDR, serviceName, re)
+			annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
+			annotate(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
 		default:
-			AnnotateBinary(span, zipkincore.LOCAL_COMPONENT, r.endpoint.GetServiceName(), r.endpoint)
+			annotateBinary(span, zipkincore.LOCAL_COMPONENT, r.endpoint.GetServiceName(), r.endpoint)
 		}
 	} else {
-		AnnotateBinary(span, zipkincore.LOCAL_COMPONENT, r.endpoint.GetServiceName(), r.endpoint)
+		annotateBinary(span, zipkincore.LOCAL_COMPONENT, r.endpoint.GetServiceName(), r.endpoint)
 	}
 
 	for key, value := range sp.Tags {
-		AnnotateBinary(span, key, value, r.endpoint)
+		annotateBinary(span, key, value, r.endpoint)
 	}
 
 	for _, spLog := range sp.Logs {
 		if spLog.Timestamp.IsZero() {
 			spLog.Timestamp = time.Now()
 		}
-		Annotate(span, spLog.Timestamp, spLog.Event, r.endpoint)
+		annotate(span, spLog.Timestamp, spLog.Event, r.endpoint)
 	}
 
 	r.collector.Collect(span)
 }
 
-// Annotate annotates the span with the given value.
-func Annotate(span *zipkincore.Span, timestamp time.Time, value string, host *zipkincore.Endpoint) {
+// annotate annotates the span with the given value.
+func annotate(span *zipkincore.Span, timestamp time.Time, value string, host *zipkincore.Endpoint) {
 	if timestamp.IsZero() {
 		timestamp = time.Now()
 	}
@@ -126,9 +126,9 @@ func Annotate(span *zipkincore.Span, timestamp time.Time, value string, host *zi
 	})
 }
 
-// AnnotateBinary annotates the span with a key and a value that will be []byte
+// annotateBinary annotates the span with a key and a value that will be []byte
 // encoded.
-func AnnotateBinary(span *zipkincore.Span, key string, value interface{}, host *zipkincore.Endpoint) {
+func annotateBinary(span *zipkincore.Span, key string, value interface{}, host *zipkincore.Endpoint) {
 	var a zipkincore.AnnotationType
 	var b []byte
 	// We are not using zipkincore.AnnotationType_I16 for types that could fit

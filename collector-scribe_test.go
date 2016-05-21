@@ -1,4 +1,4 @@
-package zipkintracer_test
+package zipkintracer
 
 import (
 	"encoding/base64"
@@ -11,7 +11,6 @@ import (
 
 	"git.apache.org/thrift.git/lib/go/thrift"
 
-	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/scribe"
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
@@ -21,7 +20,7 @@ func TestScribeCollector(t *testing.T) {
 
 	timeout := time.Second
 	batchInterval := time.Millisecond
-	c, err := zipkintracer.NewScribeCollector(server.addr(), timeout, zipkintracer.ScribeBatchSize(0), zipkintracer.ScribeBatchInterval(batchInterval))
+	c, err := NewScribeCollector(server.addr(), timeout, ScribeBatchSize(0), ScribeBatchInterval(batchInterval))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +35,7 @@ func TestScribeCollector(t *testing.T) {
 	)
 
 	span := makeNewSpan("1.2.3.4:1234", serviceName, methodName, traceID, spanID, parentSpanID, true)
-	zipkintracer.Annotate(span, time.Now(), "foo", nil)
+	annotate(span, time.Now(), "foo", nil)
 	if err := c.Collect(span); err != nil {
 		t.Errorf("error during collection: %v", err)
 	}

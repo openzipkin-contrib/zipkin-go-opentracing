@@ -4,7 +4,7 @@ import (
 	"git.apache.org/thrift.git/lib/go/thrift"
 	"gopkg.in/Shopify/sarama.v1"
 
-	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 // defaultKafkaTopic sets the standard Kafka topic our Collector will publish

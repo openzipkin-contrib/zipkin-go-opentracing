@@ -8,8 +8,8 @@ import (
 
 	"git.apache.org/thrift.git/lib/go/thrift"
 
-	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/scribe"
-	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/scribe"
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 const defaultScribeCategory = "zipkin"

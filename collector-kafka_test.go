@@ -8,8 +8,8 @@ import (
 	"git.apache.org/thrift.git/lib/go/thrift"
 	"gopkg.in/Shopify/sarama.v1"
 
-	zipkintracer "github.com/basvanbeek/zipkin-go-opentracing"
-	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 type stubProducer struct {

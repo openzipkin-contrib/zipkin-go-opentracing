@@ -10,7 +10,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	opentracing "github.com/opentracing/opentracing-go"
 
-	zipkintracer "github.com/basvanbeek/zipkin-go-opentracing"
+	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
 )
 
 type verbatimCarrier struct {

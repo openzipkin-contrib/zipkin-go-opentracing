@@ -10,7 +10,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
 
-	"github.com/basvanbeek/zipkin-go-opentracing/wire"
+	"github.com/openzipkin/zipkin-go-opentracing/wire"
 )
 
 type textMapPropagator struct {

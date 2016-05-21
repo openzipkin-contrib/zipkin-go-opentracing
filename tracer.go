@@ -9,7 +9,7 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 
-	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 // ErrInvalidEndpoint will be thrown if hostPort parameter is corrupted or host

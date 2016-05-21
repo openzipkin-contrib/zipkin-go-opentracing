@@ -116,10 +116,10 @@ func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Trac
 	return rval, nil
 }
 
-// MakeEndpoint takes the hostport and service name that represent this Zipkin
+// makeEndpoint takes the hostport and service name that represent this Zipkin
 // service, and returns an endpoint that's embedded into the Zipkin core Span
 // type. It will return a nil endpoint if the input parameters are malformed.
-func MakeEndpoint(hostport, serviceName string) *zipkincore.Endpoint {
+func makeEndpoint(hostport, serviceName string) *zipkincore.Endpoint {
 	host, port, err := net.SplitHostPort(hostport)
 	if err != nil {
 		return nil

@@ -3,7 +3,7 @@ package zipkintracer_test
 import (
 	"testing"
 
-	zipkin "github.com/basvanbeek/zipkin-go-opentracing"
+	zipkin "github.com/openzipkin/zipkin-go-opentracing"
 )
 
 func TestBoundarySampler(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	zipkintracer "github.com/basvanbeek/zipkin-go-opentracing"
-	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 var s = makeNewSpan("203.0.113.10:1234", "service1", "avg", 123, 456, 0, true)

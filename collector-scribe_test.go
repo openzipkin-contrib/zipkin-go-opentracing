@@ -11,9 +11,9 @@ import (
 
 	"git.apache.org/thrift.git/lib/go/thrift"
 
-	zipkintracer "github.com/basvanbeek/zipkin-go-opentracing"
-	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/scribe"
-	"github.com/basvanbeek/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/scribe"
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 func TestScribeCollector(t *testing.T) {

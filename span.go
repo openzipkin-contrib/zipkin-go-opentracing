@@ -180,6 +180,16 @@ func (s *spanImpl) BaggageItem(restrictedKey string) string {
 	return s.raw.Baggage[canonicalKey]
 }
 
+func (s *spanImpl) ForeachBaggageItem(handler func(k, v string) bool) {
+	s.Lock()
+	defer s.Unlock()
+	for k, v := range s.raw.Baggage {
+		if !handler(k, v) {
+			break
+		}
+	}
+}
+
 func (s *spanImpl) Tracer() opentracing.Tracer {
 	return s.tracer
 }

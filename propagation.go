@@ -4,6 +4,7 @@ import (
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/openzipkin/zipkin-go-opentracing/flag"
 )
 
 type accessorPropagator struct {
@@ -14,8 +15,8 @@ type accessorPropagator struct {
 // by types which have a means of storing the trace metadata and already know
 // how to serialize themselves (for example, protocol buffers).
 type DelegatingCarrier interface {
-	SetState(traceID, spanID, parentSpanID uint64, sampled bool)
-	State() (traceID, spanID, parentSpanID uint64, sampled bool)
+	SetState(traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags)
+	State() (traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags)
 	SetBaggageItem(key, value string)
 	GetBaggage(func(key, value string))
 }
@@ -33,11 +34,7 @@ func (p *accessorPropagator) Inject(
 		return opentracing.ErrInvalidSpan
 	}
 	meta := si.raw.Context
-	if p.tracer.options.clientServerSameSpan {
-		ac.SetState(meta.TraceID, meta.SpanID, meta.ParentSpanID, meta.Sampled)
-	} else {
-		ac.SetState(meta.TraceID, meta.ParentSpanID, 0, meta.Sampled)
-	}
+	ac.SetState(meta.TraceID, meta.SpanID, meta.ParentSpanID, meta.Sampled, meta.Flags)
 	for k, v := range si.raw.Baggage {
 		ac.SetBaggageItem(k, v)
 	}
@@ -61,17 +58,18 @@ func (p *accessorPropagator) Join(
 		sp.raw.Baggage[k] = v
 	})
 
-	traceID, spanID, parentSpanID, sampled := ac.State()
+	traceID, spanID, parentSpanID, sampled, flags := ac.State()
 	sp.raw.Context = Context{
 		TraceID: traceID,
 		Sampled: sampled,
+		Flags:   flags,
 	}
 	if p.tracer.options.clientServerSameSpan {
 		sp.raw.Context.SpanID = spanID
 		sp.raw.Context.ParentSpanID = parentSpanID
 	} else {
 		sp.raw.Context.SpanID = randomID()
-		sp.raw.Context.ParentSpanID = spanID
+		sp.raw.Context.ParentSpanID = &spanID
 	}
 
 	return p.tracer.startSpanInternal(

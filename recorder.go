@@ -11,6 +11,7 @@ import (
 	otext "github.com/opentracing/opentracing-go/ext"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	"github.com/openzipkin/zipkin-go-opentracing/flag"
 )
 
 var (
@@ -48,19 +49,21 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 	if !sp.Sampled {
 		return
 	}
-
 	var (
-		parentSpanID = int64(sp.ParentSpanID)
+		parentSpanID *int64
 		timestamp    = sp.Start.UnixNano() / 1e3
 		duration     = sp.Duration.Nanoseconds() / 1e3
 	)
-
+	if sp.ParentSpanID != nil {
+		id := int64(*sp.ParentSpanID)
+		parentSpanID = &id
+	}
 	span := &zipkincore.Span{
 		Name:      sp.Operation,
 		ID:        int64(sp.SpanID),
 		TraceID:   int64(sp.TraceID),
-		ParentID:  &parentSpanID,
-		Debug:     r.debug,
+		ParentID:  parentSpanID,
+		Debug:     r.debug || (sp.Flags&flag.Debug == flag.Debug),
 		Timestamp: &timestamp,
 		Duration:  &duration,
 	}

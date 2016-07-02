@@ -10,6 +10,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	"github.com/openzipkin/zipkin-go-opentracing/flag"
 )
 
 // ErrInvalidEndpoint will be thrown if hostPort parameter is corrupted or host
@@ -35,6 +36,7 @@ type TracerOptions struct {
 	debugAssertSingleGoroutine bool
 	debugAssertUseAfterFinish  bool
 	clientServerSameSpan       bool
+	debugMode                  bool
 }
 
 // TracerOption allows for functional options.
@@ -91,6 +93,14 @@ func ClientServerSameSpan(val bool) TracerOption {
 	}
 }
 
+// DebugMode allows to set the tracer to Zipkin debug mode
+func DebugMode(val bool) TracerOption {
+	return func(opts *TracerOptions) error {
+		opts.debugMode = val
+		return nil
+	}
+}
+
 // NewTracer creates a new OpenTracing compatible Zipkin Tracer.
 func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Tracer, error) {
 	opts := &TracerOptions{
@@ -102,6 +112,7 @@ func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Trac
 		debugAssertSingleGoroutine: false,
 		debugAssertUseAfterFinish:  false,
 		clientServerSameSpan:       false,
+		debugMode:                  false,
 	}
 	for _, o := range options {
 		err := o(opts)
@@ -192,17 +203,15 @@ func (t *tracerImpl) StartSpanWithOptions(
 	if opts.Parent == nil {
 		sp.raw.TraceID, sp.raw.SpanID = randomID2()
 		sp.raw.Sampled = t.options.shouldSample(sp.raw.TraceID)
+		sp.raw.Flags = flag.IsRoot
 	} else {
 		pr := opts.Parent.(*spanImpl)
 		sp.raw.TraceID = pr.raw.TraceID
 		sp.raw.SpanID = randomID()
-		if t.options.clientServerSameSpan {
-			sp.raw.ParentSpanID = pr.raw.SpanID
-		} else {
-			sp.raw.ParentSpanID = 0
-		}
+		sp.raw.ParentSpanID = &pr.raw.SpanID
 		sp.raw.Sampled = pr.raw.Sampled
-
+		sp.raw.Flags = pr.raw.Flags
+		sp.raw.Flags &^= flag.IsRoot // unset IsRoot flag if needed
 		pr.Lock()
 		if l := len(pr.raw.Baggage); l > 0 {
 			sp.raw.Baggage = make(map[string]string, len(pr.raw.Baggage))
@@ -212,7 +221,9 @@ func (t *tracerImpl) StartSpanWithOptions(
 		}
 		pr.Unlock()
 	}
-
+	if t.options.debugMode {
+		sp.raw.Flags |= flag.Debug
+	}
 	return t.startSpanInternal(
 		sp,
 		opts.OperationName,

@@ -10,6 +10,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
 
+	"github.com/openzipkin/zipkin-go-opentracing/flag"
 	"github.com/openzipkin/zipkin-go-opentracing/wire"
 )
 
@@ -23,17 +24,19 @@ type binaryPropagator struct {
 const (
 	prefixBaggage = "ot-baggage-"
 
-	tracerStateFieldCount = 4
+	tracerStateFieldCount = 3 // not 5, X-B3-ParentSpanId is optional and we allow optional Sampled header
 
 	zipkinTraceID      = "X-B3-TraceId"
 	zipkinSpanID       = "X-B3-SpanId"
 	zipkinParentSpanID = "X-B3-ParentSpanId"
 	zipkinSampled      = "X-B3-Sampled"
+	zipkinFlags        = "X-B3-Flags"
 
 	zipkinTraceIDLower      = "x-b3-traceid"
 	zipkinSpanIDLower       = "x-b3-spanid"
 	zipkinParentSpanIDLower = "x-b3-parentspanid"
 	zipkinSampledLower      = "x-b3-sampled"
+	zipkinFlagsLower        = "x-b3-flags"
 )
 
 func (p *textMapPropagator) Inject(
@@ -51,11 +54,15 @@ func (p *textMapPropagator) Inject(
 
 	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.raw.TraceID, 16))
 	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.raw.SpanID, 16))
-	if !p.tracer.options.clientServerSameSpan {
-		sc.raw.ParentSpanID = 0
+	if sc.raw.ParentSpanID != nil {
+		// we only set ParentSpanID header if there is a parent span
+		carrier.Set(zipkinParentSpanID, strconv.FormatUint(*sc.raw.ParentSpanID, 16))
 	}
-	carrier.Set(zipkinParentSpanID, strconv.FormatUint(sc.raw.ParentSpanID, 16))
+	// we explicitely set the Sampled header
 	carrier.Set(zipkinSampled, strconv.FormatBool(sc.raw.Sampled))
+	// we only need to inject the debug flag if set. see flag package for details.
+	flags := sc.raw.Flags & flag.Debug
+	carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
 
 	sc.Lock()
 	for k, v := range sc.raw.Baggage {
@@ -74,9 +81,14 @@ func (p *textMapPropagator) Join(
 		return nil, opentracing.ErrInvalidCarrier
 	}
 	requiredFieldCount := 0
-	var traceID, spanID, parentSpanID uint64
-	var sampled bool
-	var err error
+	var (
+		traceID      uint64
+		spanID       uint64
+		parentSpanID *uint64
+		sampled      bool
+		flags        flag.Flags
+		err          error
+	)
 	decodedBaggage := make(map[string]string)
 	err = carrier.ForeachKey(func(k, v string) error {
 		switch strings.ToLower(k) {
@@ -91,17 +103,27 @@ func (p *textMapPropagator) Join(
 				return opentracing.ErrTraceCorrupted
 			}
 		case zipkinParentSpanIDLower:
-			parentSpanID, err = strconv.ParseUint(v, 16, 64)
+			var id uint64
+			id, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrTraceCorrupted
 			}
-			if !p.tracer.options.clientServerSameSpan {
-				parentSpanID = 0
-			}
+			parentSpanID = &id
 		case zipkinSampledLower:
 			sampled, err = strconv.ParseBool(v)
 			if err != nil {
 				return opentracing.ErrTraceCorrupted
+			}
+			// Sampled header was explicitely set
+			flags |= flag.SamplingSet
+		case zipkinFlagsLower:
+			var f uint64
+			f, err = strconv.ParseUint(v, 10, 64)
+			if err != nil {
+				return opentracing.ErrTraceCorrupted
+			}
+			if flag.Flags(f)&flag.Debug == flag.Debug {
+				flags |= flag.Debug
 			}
 		default:
 			lowercaseK := strings.ToLower(k)
@@ -124,17 +146,23 @@ func (p *textMapPropagator) Join(
 		return nil, opentracing.ErrTraceCorrupted
 	}
 
+	// check if Sample state was communicated through the Flags bitset
+	if !sampled && flags&flag.Sampled == flag.Sampled {
+		sampled = true
+	}
+
 	sp := p.tracer.getSpan()
 	context := Context{
 		TraceID: traceID,
 		Sampled: sampled,
+		Flags:   flags,
 	}
 	if p.tracer.options.clientServerSameSpan {
 		context.SpanID = spanID
 		context.ParentSpanID = parentSpanID
 	} else {
 		context.SpanID = randomID()
-		context.ParentSpanID = spanID
+		context.ParentSpanID = &spanID
 	}
 	sp.raw = RawSpan{
 		Context: context,
@@ -162,15 +190,25 @@ func (p *binaryPropagator) Inject(
 		return opentracing.ErrInvalidCarrier
 	}
 
-	if !p.tracer.options.clientServerSameSpan {
-		sc.raw.ParentSpanID = 0
-	}
-
 	state := wire.TracerState{}
+	// encode the debug bit
+	flags := sc.raw.Flags & flag.Debug
 	state.TraceId = sc.raw.TraceID
 	state.SpanId = sc.raw.SpanID
-	state.ParentSpanId = sc.raw.ParentSpanID
+	if sc.raw.ParentSpanID != nil {
+		state.ParentSpanId = *sc.raw.ParentSpanID
+	} else {
+		// root span...
+		state.ParentSpanId = 0
+		flags |= flag.IsRoot
+	}
 	state.Sampled = sc.raw.Sampled
+	// we explicitely inform our sampling state downstream
+	flags |= flag.SamplingSet
+	if sc.raw.Sampled {
+		flags |= flag.Sampled
+	}
+	state.Flags = uint64(flags)
 	state.BaggageItems = sc.raw.Baggage
 
 	b, err := proto.Marshal(&state)
@@ -229,11 +267,23 @@ func (p *binaryPropagator) Join(
 	}
 	if p.tracer.options.clientServerSameSpan {
 		context.SpanID = ctx.SpanId
-		context.ParentSpanID = ctx.ParentSpanId
+		context.ParentSpanID = &ctx.ParentSpanId
 	} else {
 		context.SpanID = randomID()
-		context.ParentSpanID = ctx.SpanId
+		context.ParentSpanID = &ctx.SpanId
 	}
+	flags := flag.Flags(ctx.Flags)
+	if flags&flag.IsRoot == flag.IsRoot {
+		context.ParentSpanID = nil
+	}
+	if flags&flag.Sampled == flag.Sampled {
+		context.Sampled = true
+	}
+	// this propagator expects sampling state to be explicitely propagated by the
+	// upstream service. so set this flag to indentify to tracer it should not
+	// run its sampler in case it is not the root of the trace.
+	flags |= flag.SamplingSet
+	context.Flags = flags
 	sp.raw = RawSpan{
 		Context: context,
 		Baggage: ctx.BaggageItems,

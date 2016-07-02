@@ -52,9 +52,11 @@ func (p *textMapPropagator) Inject(
 	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.raw.TraceID, 16))
 	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.raw.SpanID, 16))
 	if !p.tracer.options.clientServerSameSpan {
-		sc.raw.ParentSpanID = 0
+		carrier.Set(zipkinParentSpanID, "0")
+	} else {
+		carrier.Set(zipkinParentSpanID, strconv.FormatUint(sc.raw.ParentSpanID, 16))
 	}
-	carrier.Set(zipkinParentSpanID, strconv.FormatUint(sc.raw.ParentSpanID, 16))
+
 	carrier.Set(zipkinSampled, strconv.FormatBool(sc.raw.Sampled))
 
 	sc.Lock()

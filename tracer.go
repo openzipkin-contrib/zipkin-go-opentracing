@@ -186,7 +186,11 @@ func (t *tracerImpl) StartSpanWithOptions(
 
 	// Build the new span. This is the only allocation: We'll return this as
 	// an opentracing.Span.
-	sp := &spanImpl{}
+	sp := &spanImpl{
+		raw: RawSpan{
+			Context: &Context{},
+		},
+	}
 	// Look for a parent in the list of References.
 	//
 	// TODO: would be nice if basictracer did something with all

@@ -10,7 +10,7 @@ import (
 type RawSpan struct {
 	// The RawSpan embeds its Context. Those recording the RawSpan
 	// should also record the contents of its Context.
-	Context
+	*Context
 
 	// The name of the "operation" this span is an instance of. (Called a "span
 	// name" in some implementations)

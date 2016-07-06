@@ -51,7 +51,9 @@ func (s *spanImpl) reset() {
 	// a buffer pool when GC considers them unreachable, which should ease
 	// some of the load. Hard to say how quickly that would be in practice
 	// though.
-	s.raw = RawSpan{}
+	s.raw = RawSpan{
+		Context: &Context{},
+	}
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
@@ -144,7 +146,7 @@ func (s *spanImpl) Tracer() opentracing.Tracer {
 }
 
 func (s *spanImpl) Context() opentracing.SpanContext {
-	return &s.raw.Context
+	return s.raw.Context
 }
 
 func (s *spanImpl) Operation() string {

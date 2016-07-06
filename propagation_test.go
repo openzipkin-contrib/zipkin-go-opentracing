@@ -49,7 +49,7 @@ func TestSpanPropagator(t *testing.T) {
 		t.Fatalf("Unable to create Tracer: %+v", err)
 	}
 	sp := tracer.StartSpan(op)
-	sp.SetBaggageItem("foo", "bar")
+	sp.Context().SetBaggageItem("foo", "bar")
 
 	tmc := opentracing.HTTPHeaderTextMapCarrier(http.Header{})
 	tests := []struct {
@@ -61,14 +61,15 @@ func TestSpanPropagator(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		if err := tracer.Inject(sp, test.typ, test.carrier); err != nil {
+		if err := tracer.Inject(sp.Context(), test.typ, test.carrier); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		child, err := tracer.Join(op, test.typ, test.carrier)
+		extractedContext, err := tracer.Extract(test.typ, test.carrier)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		child.Finish()
+		childSpan := tracer.StartSpan(op, opentracing.ChildOf(extractedContext))
+		childSpan.Finish()
 	}
 	sp.Finish()
 
@@ -83,7 +84,7 @@ func TestSpanPropagator(t *testing.T) {
 	exp.Start = time.Time{}.Add(1)
 
 	for i, sp := range spans {
-		if a, e := sp.ParentSpanID, exp.ParentSpanID; a != e {
+		if a, e := sp.ParentSpanID, exp.SpanID; a != e {
 			t.Fatalf("%d: ParentSpanID %d does not match expectation %d", i, a, e)
 		} else {
 			// Prepare for comparison.

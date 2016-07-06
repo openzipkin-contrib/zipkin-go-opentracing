@@ -1,10 +1,6 @@
 package zipkintracer
 
-import (
-	"time"
-
-	opentracing "github.com/opentracing/opentracing-go"
-)
+import opentracing "github.com/opentracing/opentracing-go"
 
 type accessorPropagator struct {
 	tracer *tracerImpl
@@ -21,63 +17,49 @@ type DelegatingCarrier interface {
 }
 
 func (p *accessorPropagator) Inject(
-	sp opentracing.Span,
+	spanContext opentracing.SpanContext,
 	carrier interface{},
 ) error {
 	ac, ok := carrier.(DelegatingCarrier)
 	if !ok || ac == nil {
 		return opentracing.ErrInvalidCarrier
 	}
-	si, ok := sp.(*spanImpl)
+	sc, ok := spanContext.(*Context)
 	if !ok {
-		return opentracing.ErrInvalidSpan
+		return opentracing.ErrInvalidSpanContext
 	}
-	meta := si.raw.Context
 	if p.tracer.options.clientServerSameSpan {
-		ac.SetState(meta.TraceID, meta.SpanID, meta.ParentSpanID, meta.Sampled)
+		ac.SetState(sc.TraceID, sc.SpanID, sc.ParentSpanID, sc.Sampled)
 	} else {
-		ac.SetState(meta.TraceID, meta.ParentSpanID, 0, meta.Sampled)
+		ac.SetState(sc.TraceID, sc.ParentSpanID, 0, sc.Sampled)
 	}
-	for k, v := range si.raw.Baggage {
+	for k, v := range sc.Baggage {
 		ac.SetBaggageItem(k, v)
 	}
 	return nil
 }
 
-func (p *accessorPropagator) Join(
-	operationName string,
+func (p *accessorPropagator) Extract(
 	carrier interface{},
-) (opentracing.Span, error) {
+) (opentracing.SpanContext, error) {
 	ac, ok := carrier.(DelegatingCarrier)
 	if !ok || ac == nil {
 		return nil, opentracing.ErrInvalidCarrier
 	}
 
-	sp := p.tracer.getSpan()
+	traceID, spanID, parentSpanID, sampled := ac.State()
+	sc := &Context{
+		TraceID:      traceID,
+		SpanID:       spanID,
+		ParentSpanID: parentSpanID,
+		Sampled:      sampled,
+	}
 	ac.GetBaggage(func(k, v string) {
-		if sp.raw.Baggage == nil {
-			sp.raw.Baggage = map[string]string{}
+		if sc.Baggage == nil {
+			sc.Baggage = map[string]string{}
 		}
-		sp.raw.Baggage[k] = v
+		sc.Baggage[k] = v
 	})
 
-	traceID, spanID, parentSpanID, sampled := ac.State()
-	sp.raw.Context = Context{
-		TraceID: traceID,
-		Sampled: sampled,
-	}
-	if p.tracer.options.clientServerSameSpan {
-		sp.raw.Context.SpanID = spanID
-		sp.raw.Context.ParentSpanID = parentSpanID
-	} else {
-		sp.raw.Context.SpanID = randomID()
-		sp.raw.Context.ParentSpanID = spanID
-	}
-
-	return p.tracer.startSpanInternal(
-		sp,
-		operationName,
-		time.Now(),
-		nil,
-	), nil
+	return sc, nil
 }

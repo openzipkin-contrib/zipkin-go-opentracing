@@ -5,7 +5,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -37,38 +36,37 @@ const (
 )
 
 func (p *textMapPropagator) Inject(
-	sp opentracing.Span,
+	spanContext opentracing.SpanContext,
 	opaqueCarrier interface{},
 ) error {
-	sc, ok := sp.(*spanImpl)
+	sc, ok := spanContext.(*Context)
 	if !ok {
-		return opentracing.ErrInvalidSpan
+		return opentracing.ErrInvalidSpanContext
 	}
 	carrier, ok := opaqueCarrier.(opentracing.TextMapWriter)
 	if !ok {
 		return opentracing.ErrInvalidCarrier
 	}
 
-	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.raw.TraceID, 16))
-	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.raw.SpanID, 16))
+	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.TraceID, 16))
+	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.SpanID, 16))
 	if !p.tracer.options.clientServerSameSpan {
-		sc.raw.ParentSpanID = 0
+		sc.ParentSpanID = 0
 	}
-	carrier.Set(zipkinParentSpanID, strconv.FormatUint(sc.raw.ParentSpanID, 16))
-	carrier.Set(zipkinSampled, strconv.FormatBool(sc.raw.Sampled))
+	carrier.Set(zipkinParentSpanID, strconv.FormatUint(sc.ParentSpanID, 16))
+	carrier.Set(zipkinSampled, strconv.FormatBool(sc.Sampled))
 
 	sc.Lock()
-	for k, v := range sc.raw.Baggage {
+	for k, v := range sc.Baggage {
 		carrier.Set(prefixBaggage+k, v)
 	}
 	sc.Unlock()
 	return nil
 }
 
-func (p *textMapPropagator) Join(
-	operationName string,
+func (p *textMapPropagator) Extract(
 	opaqueCarrier interface{},
-) (opentracing.Span, error) {
+) (opentracing.SpanContext, error) {
 	carrier, ok := opaqueCarrier.(opentracing.TextMapReader)
 	if !ok {
 		return nil, opentracing.ErrInvalidCarrier
@@ -83,17 +81,17 @@ func (p *textMapPropagator) Join(
 		case zipkinTraceIDLower:
 			traceID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 		case zipkinSpanIDLower:
 			spanID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 		case zipkinParentSpanIDLower:
 			parentSpanID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 			if !p.tracer.options.clientServerSameSpan {
 				parentSpanID = 0
@@ -101,7 +99,7 @@ func (p *textMapPropagator) Join(
 		case zipkinSampledLower:
 			sampled, err = strconv.ParseBool(v)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 		default:
 			lowercaseK := strings.ToLower(k)
@@ -119,43 +117,27 @@ func (p *textMapPropagator) Join(
 	}
 	if requiredFieldCount < tracerStateFieldCount {
 		if requiredFieldCount == 0 {
-			return nil, opentracing.ErrTraceNotFound
+			return nil, opentracing.ErrSpanContextNotFound
 		}
-		return nil, opentracing.ErrTraceCorrupted
+		return nil, opentracing.ErrSpanContextCorrupted
 	}
 
-	sp := p.tracer.getSpan()
-	context := Context{
-		TraceID: traceID,
-		Sampled: sampled,
-	}
-	if p.tracer.options.clientServerSameSpan {
-		context.SpanID = spanID
-		context.ParentSpanID = parentSpanID
-	} else {
-		context.SpanID = randomID()
-		context.ParentSpanID = spanID
-	}
-	sp.raw = RawSpan{
-		Context: context,
-		Baggage: decodedBaggage,
-	}
-
-	return p.tracer.startSpanInternal(
-		sp,
-		operationName,
-		time.Now(),
-		nil,
-	), nil
+	return &Context{
+		TraceID:      traceID,
+		SpanID:       spanID,
+		ParentSpanID: parentSpanID,
+		Sampled:      sampled,
+		Baggage:      decodedBaggage,
+	}, nil
 }
 
 func (p *binaryPropagator) Inject(
-	sp opentracing.Span,
+	spanContext opentracing.SpanContext,
 	opaqueCarrier interface{},
 ) error {
-	sc, ok := sp.(*spanImpl)
+	sc, ok := spanContext.(*Context)
 	if !ok {
-		return opentracing.ErrInvalidSpan
+		return opentracing.ErrInvalidSpanContext
 	}
 	carrier, ok := opaqueCarrier.(io.Writer)
 	if !ok {
@@ -163,15 +145,15 @@ func (p *binaryPropagator) Inject(
 	}
 
 	if !p.tracer.options.clientServerSameSpan {
-		sc.raw.ParentSpanID = 0
+		sc.ParentSpanID = 0
 	}
 
 	state := wire.TracerState{}
-	state.TraceId = sc.raw.TraceID
-	state.SpanId = sc.raw.SpanID
-	state.ParentSpanId = sc.raw.ParentSpanID
-	state.Sampled = sc.raw.Sampled
-	state.BaggageItems = sc.raw.Baggage
+	state.TraceId = sc.TraceID
+	state.SpanId = sc.SpanID
+	state.ParentSpanId = sc.ParentSpanID
+	state.Sampled = sc.Sampled
+	state.BaggageItems = sc.Baggage
 
 	b, err := proto.Marshal(&state)
 	if err != nil {
@@ -188,10 +170,9 @@ func (p *binaryPropagator) Inject(
 	return err
 }
 
-func (p *binaryPropagator) Join(
-	operationName string,
+func (p *binaryPropagator) Extract(
 	opaqueCarrier interface{},
-) (opentracing.Span, error) {
+) (opentracing.SpanContext, error) {
 	carrier, ok := opaqueCarrier.(io.Reader)
 	if !ok {
 		return nil, opentracing.ErrInvalidCarrier
@@ -203,46 +184,26 @@ func (p *binaryPropagator) Join(
 	// the exact amount of bytes into it.
 	var length uint32
 	if err := binary.Read(carrier, binary.BigEndian, &length); err != nil {
-		return nil, opentracing.ErrTraceCorrupted
+		return nil, opentracing.ErrSpanContextCorrupted
 	}
 	buf := make([]byte, length)
 	if n, err := carrier.Read(buf); err != nil {
 		if n > 0 {
-			return nil, opentracing.ErrTraceCorrupted
+			return nil, opentracing.ErrSpanContextCorrupted
 		}
-		return nil, opentracing.ErrTraceNotFound
+		return nil, opentracing.ErrSpanContextNotFound
 	}
 
-	ctx := wire.TracerState{}
-	if err := proto.Unmarshal(buf, &ctx); err != nil {
-		return nil, opentracing.ErrTraceCorrupted
+	protoContext := wire.TracerState{}
+	if err := proto.Unmarshal(buf, &protoContext); err != nil {
+		return nil, opentracing.ErrSpanContextCorrupted
 	}
 
-	if !p.tracer.options.clientServerSameSpan {
-		ctx.ParentSpanId = 0
-	}
-
-	sp := p.tracer.getSpan()
-	context := Context{
-		TraceID: ctx.TraceId,
-		Sampled: ctx.Sampled,
-	}
-	if p.tracer.options.clientServerSameSpan {
-		context.SpanID = ctx.SpanId
-		context.ParentSpanID = ctx.ParentSpanId
-	} else {
-		context.SpanID = randomID()
-		context.ParentSpanID = ctx.SpanId
-	}
-	sp.raw = RawSpan{
-		Context: context,
-		Baggage: ctx.BaggageItems,
-	}
-
-	return p.tracer.startSpanInternal(
-		sp,
-		operationName,
-		time.Now(),
-		nil,
-	), nil
+	return &Context{
+		TraceID:      protoContext.TraceId,
+		Sampled:      protoContext.Sampled,
+		SpanID:       protoContext.SpanId,
+		ParentSpanID: protoContext.ParentSpanId,
+		Baggage:      protoContext.BaggageItems,
+	}, nil
 }

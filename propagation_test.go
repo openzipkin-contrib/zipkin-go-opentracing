@@ -11,6 +11,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 
 	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
+	"github.com/openzipkin/zipkin-go-opentracing/flag"
 )
 
 type verbatimCarrier struct {
@@ -30,12 +31,12 @@ func (vc *verbatimCarrier) GetBaggage(f func(string, string)) {
 	}
 }
 
-func (vc *verbatimCarrier) SetState(tID, sID, pId uint64, sampled bool) {
-	vc.Context = zipkintracer.Context{TraceID: tID, SpanID: sID, ParentSpanID: pId, Sampled: sampled}
+func (vc *verbatimCarrier) SetState(tID, sID uint64, pId *uint64, sampled bool, flags flag.Flags) {
+	vc.Context = zipkintracer.Context{TraceID: tID, SpanID: sID, ParentSpanID: pId, Sampled: sampled, Flags: flags}
 }
 
-func (vc *verbatimCarrier) State() (traceID, spanID, parentSpanID uint64, sampled bool) {
-	return vc.Context.TraceID, vc.Context.SpanID, vc.Context.ParentSpanID, vc.Context.Sampled
+func (vc *verbatimCarrier) State() (traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags) {
+	return vc.Context.TraceID, vc.Context.SpanID, vc.Context.ParentSpanID, vc.Context.Sampled, vc.Context.Flags
 }
 
 func TestSpanPropagator(t *testing.T) {
@@ -44,6 +45,7 @@ func TestSpanPropagator(t *testing.T) {
 	tracer, err := zipkintracer.NewTracer(
 		recorder,
 		zipkintracer.ClientServerSameSpan(true),
+		zipkintracer.DebugMode(true),
 	)
 	if err != nil {
 		t.Fatalf("Unable to create Tracer: %+v", err)
@@ -84,10 +86,13 @@ func TestSpanPropagator(t *testing.T) {
 
 	for i, sp := range spans {
 		if a, e := sp.ParentSpanID, exp.ParentSpanID; a != e {
+			t.Errorf("%d: wanted %+v, got %+v", i, spew.Sdump(exp), spew.Sdump(sp))
 			t.Fatalf("%d: ParentSpanID %d does not match expectation %d", i, a, e)
 		} else {
 			// Prepare for comparison.
-			sp.SpanID, sp.ParentSpanID = exp.SpanID, 0
+			sp.Context.Flags &= flag.Debug  // other flags then Debug should be discarded in comparison
+			exp.Context.Flags &= flag.Debug // other flags then Debug should be discarded in comparison
+			sp.SpanID, sp.ParentSpanID = exp.SpanID, exp.ParentSpanID
 			sp.Duration, sp.Start = exp.Duration, exp.Start
 		}
 		if a, e := sp.TraceID, exp.TraceID; a != e {

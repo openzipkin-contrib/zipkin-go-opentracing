@@ -1,7 +1,6 @@
 package zipkintracer
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -16,9 +15,6 @@ import (
 // to (*opentracing.Span).Finish().
 type Span interface {
 	opentracing.Span
-
-	// Context contains trace identifiers
-	Context() Context
 
 	// Operation names the work done by this span instance
 	Operation() string
@@ -59,7 +55,9 @@ func (s *spanImpl) reset() {
 	// a buffer pool when GC considers them unreachable, which should ease
 	// some of the load. Hard to say how quickly that would be in practice
 	// though.
-	s.raw = RawSpan{}
+	s.raw = RawSpan{
+		SpanContext: &SpanContext{},
+	}
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
@@ -78,8 +76,10 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 	s.Lock()
 	defer s.Unlock()
 	if key == string(ext.SamplingPriority) {
-		s.raw.Sampled = true
-		return s
+		if v, ok := value.(uint16); ok {
+			s.raw.Sampled = v != 0
+			return s
+		}
 	}
 	if s.trim() {
 		return s
@@ -140,53 +140,17 @@ func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
 
 	s.onFinish(s.raw)
 	s.tracer.options.recorder.RecordSpan(s.raw)
+
+	// Last chance to get options before the span is possbily reset.
+	poolEnabled := s.tracer.options.enableSpanPool
 	if s.tracer.options.debugAssertUseAfterFinish {
 		// This makes it much more likely to catch a panic on any subsequent
 		// operation since s.tracer is accessed on every call to `Lock`.
 		s.reset()
 	}
-	spanPool.Put(s)
-}
 
-func (s *spanImpl) SetBaggageItem(restrictedKey, val string) opentracing.Span {
-	canonicalKey, valid := opentracing.CanonicalizeBaggageKey(restrictedKey)
-	if !valid {
-		panic(fmt.Errorf("Invalid key: %q", restrictedKey))
-	}
-
-	s.Lock()
-	defer s.Unlock()
-	s.onBaggage(canonicalKey, val)
-	if s.trim() {
-		return s
-	}
-
-	if s.raw.Baggage == nil {
-		s.raw.Baggage = make(map[string]string)
-	}
-	s.raw.Baggage[canonicalKey] = val
-	return s
-}
-
-func (s *spanImpl) BaggageItem(restrictedKey string) string {
-	canonicalKey, valid := opentracing.CanonicalizeBaggageKey(restrictedKey)
-	if !valid {
-		panic(fmt.Errorf("Invalid key: %q", restrictedKey))
-	}
-
-	s.Lock()
-	defer s.Unlock()
-
-	return s.raw.Baggage[canonicalKey]
-}
-
-func (s *spanImpl) ForeachBaggageItem(handler func(k, v string) bool) {
-	s.Lock()
-	defer s.Unlock()
-	for k, v := range s.raw.Baggage {
-		if !handler(k, v) {
-			break
-		}
+	if poolEnabled {
+		spanPool.Put(s)
 	}
 }
 
@@ -194,8 +158,8 @@ func (s *spanImpl) Tracer() opentracing.Tracer {
 	return s.tracer
 }
 
-func (s *spanImpl) Context() Context {
-	return s.raw.Context
+func (s *spanImpl) Context() opentracing.SpanContext {
+	return s.raw.SpanContext
 }
 
 func (s *spanImpl) Operation() string {

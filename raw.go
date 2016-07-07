@@ -10,7 +10,7 @@ import (
 type RawSpan struct {
 	// The RawSpan embeds its Context. Those recording the RawSpan
 	// should also record the contents of its Context.
-	Context
+	*SpanContext
 
 	// The name of the "operation" this span is an instance of. (Called a "span
 	// name" in some implementations)
@@ -27,7 +27,4 @@ type RawSpan struct {
 
 	// The span's "microlog".
 	Logs []opentracing.LogData
-
-	// The span's associated baggage.
-	Baggage map[string]string // initialized on first use
 }

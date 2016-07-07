@@ -7,6 +7,6 @@ message TracerState {
   fixed64 span_id = 2;
   bool    sampled = 3;
   map<string, string> baggage_items = 4;
-  fixed64 parent_span_id = 5;
-  fixed64 flags = 6;
+  fixed64 parent_span_id = 21;
+  fixed64 flags = 22;
 }

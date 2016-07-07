@@ -2,7 +2,7 @@ package zipkintracer
 
 import (
 	"git.apache.org/thrift.git/lib/go/thrift"
-	"gopkg.in/Shopify/sarama.v1"
+	"github.com/Shopify/sarama"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )

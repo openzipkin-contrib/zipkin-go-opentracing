@@ -1,15 +1,12 @@
 package zipkintracer
 
 import (
-	"encoding/binary"
 	"errors"
-	"net"
-	"strconv"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 
-	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
 )
 
@@ -28,15 +25,70 @@ type Tracer interface {
 
 // TracerOptions allows creating a customized Tracer.
 type TracerOptions struct {
-	shouldSample               func(traceID uint64) bool
-	trimUnsampledSpans         bool
-	recorder                   SpanRecorder
-	newSpanEventListener       func() func(SpanEvent)
-	logger                     Logger
+	// shouldSample is a function which is called when creating a new Span and
+	// determines whether that Span is sampled. The randomized TraceID is supplied
+	// to allow deterministic sampling decisions to be made across different nodes.
+	shouldSample func(traceID uint64) bool
+	// trimUnsampledSpans turns potentially expensive operations on unsampled
+	// Spans into no-ops. More precisely, tags, baggage items, and log events
+	// are silently discarded. If NewSpanEventListener is set, the callbacks
+	// will still fire in that case.
+	trimUnsampledSpans bool
+	// recorder receives Spans which have been finished.
+	recorder SpanRecorder
+	// newSpanEventListener can be used to enhance the tracer by effectively
+	// attaching external code to trace events. See NetTraceIntegrator for a
+	// practical example, and event.go for the list of possible events.
+	newSpanEventListener func() func(SpanEvent)
+	logger               Logger
+	// debugAssertSingleGoroutine internally records the ID of the goroutine
+	// creating each Span and verifies that no operation is carried out on
+	// it on a different goroutine.
+	// Provided strictly for development purposes.
+	// Passing Spans between goroutine without proper synchronization often
+	// results in use-after-Finish() errors. For a simple example, consider the
+	// following pseudocode:
+	//
+	//  func (s *Server) Handle(req http.Request) error {
+	//    sp := s.StartSpan("server")
+	//    defer sp.Finish()
+	//    wait := s.queueProcessing(opentracing.ContextWithSpan(context.Background(), sp), req)
+	//    select {
+	//    case resp := <-wait:
+	//      return resp.Error
+	//    case <-time.After(10*time.Second):
+	//      sp.LogEvent("timed out waiting for processing")
+	//      return ErrTimedOut
+	//    }
+	//  }
+	//
+	// This looks reasonable at first, but a request which spends more than ten
+	// seconds in the queue is abandoned by the main goroutine and its trace
+	// finished, leading to use-after-finish when the request is finally
+	// processed. Note also that even joining on to a finished Span via
+	// StartSpanWithOptions constitutes an illegal operation.
+	//
+	// Code bases which do not require (or decide they do not want) Spans to
+	// be passed across goroutine boundaries can run with this flag enabled in
+	// tests to increase their chances of spotting wrong-doers.
 	debugAssertSingleGoroutine bool
-	debugAssertUseAfterFinish  bool
-	clientServerSameSpan       bool
-	debugMode                  bool
+	// debugAssertUseAfterFinish is provided strictly for development purposes.
+	// When set, it attempts to exacerbate issues emanating from use of Spans
+	// after calling Finish by running additional assertions.
+	debugAssertUseAfterFinish bool
+	// clientServerSameSpan allows for Zipkin V1 style span per RPC. This places
+	// both client end and server end of a RPC call into the same span.
+	clientServerSameSpan bool
+	// debugMode activates Zipkin's debug request allowing for all Spans originating
+	// from this tracer to pass through and bypass sampling. Use with extreme care
+	// as it might flood your system if you have many traces starting from the
+	// service you are instrumenting.
+	debugMode bool
+	// enableSpanPool enables the use of a pool, so that the tracer reuses spans
+	// after Finish has been called on it. Adds a slight performance gain as it
+	// reduces allocations. However, if you have any use-after-finish race
+	// conditions the code may panic.
+	enableSpanPool bool
 }
 
 // TracerOption allows for functional options.
@@ -101,6 +153,14 @@ func DebugMode(val bool) TracerOption {
 	}
 }
 
+// EnableSpanPool ...
+func EnableSpanPool(val bool) TracerOption {
+	return func(opts *TracerOptions) error {
+		opts.enableSpanPool = val
+		return nil
+	}
+}
+
 // NewTracer creates a new OpenTracing compatible Zipkin Tracer.
 func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Tracer, error) {
 	opts := &TracerOptions{
@@ -127,41 +187,6 @@ func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Trac
 	return rval, nil
 }
 
-// makeEndpoint takes the hostport and service name that represent this Zipkin
-// service, and returns an endpoint that's embedded into the Zipkin core Span
-// type. It will return a nil endpoint if the input parameters are malformed.
-func makeEndpoint(hostport, serviceName string) *zipkincore.Endpoint {
-	host, port, err := net.SplitHostPort(hostport)
-	if err != nil {
-		return nil
-	}
-	portInt, err := strconv.ParseInt(port, 10, 16)
-	if err != nil {
-		return nil
-	}
-	addrs, err := net.LookupIP(host)
-	if err != nil {
-		return nil
-	}
-	// we need the first IPv4 address.
-	var addr net.IP
-	for i := range addrs {
-		addr = addrs[i].To4()
-		if addr != nil {
-			break
-		}
-	}
-	if addr == nil {
-		// none of the returned addresses is IPv4.
-		return nil
-	}
-	endpoint := zipkincore.NewEndpoint()
-	endpoint.Ipv4 = (int32)(binary.BigEndian.Uint32(addr))
-	endpoint.Port = int16(portInt)
-	endpoint.ServiceName = serviceName
-	return endpoint
-}
-
 // Implements the `Tracer` interface.
 type tracerImpl struct {
 	options            TracerOptions
@@ -172,20 +197,30 @@ type tracerImpl struct {
 
 func (t *tracerImpl) StartSpan(
 	operationName string,
+	opts ...opentracing.StartSpanOption,
 ) opentracing.Span {
-	return t.StartSpanWithOptions(
-		opentracing.StartSpanOptions{
-			OperationName: operationName,
-		})
+	sso := opentracing.StartSpanOptions{}
+	for _, o := range opts {
+		o.Apply(&sso)
+	}
+	return t.startSpanWithOptions(operationName, sso)
 }
 
 func (t *tracerImpl) getSpan() *spanImpl {
-	sp := spanPool.Get().(*spanImpl)
-	sp.reset()
-	return sp
+	if t.options.enableSpanPool {
+		sp := spanPool.Get().(*spanImpl)
+		sp.reset()
+		return sp
+	}
+	return &spanImpl{
+		raw: RawSpan{
+			SpanContext: &SpanContext{},
+		},
+	}
 }
 
-func (t *tracerImpl) StartSpanWithOptions(
+func (t *tracerImpl) startSpanWithOptions(
+	operationName string,
 	opts opentracing.StartSpanOptions,
 ) opentracing.Span {
 	// Start time.
@@ -198,35 +233,58 @@ func (t *tracerImpl) StartSpanWithOptions(
 	tags := opts.Tags
 
 	// Build the new span. This is the only allocation: We'll return this as
-	// a opentracing.Span.
+	// an opentracing.Span.
 	sp := t.getSpan()
-	if opts.Parent == nil {
+	// Look for a parent in the list of References.
+	//
+	// TODO: would be nice if basictracer did something with all
+	// References, not just the first one.
+ReferencesLoop:
+	for _, ref := range opts.References {
+		switch ref.Type {
+		case opentracing.ChildOfRef,
+			opentracing.FollowsFromRef:
+
+			refMD := ref.Referee.(*SpanContext)
+			sp.raw.TraceID = refMD.TraceID
+			sp.raw.ParentSpanID = &refMD.SpanID
+			sp.raw.Sampled = refMD.Sampled
+			sp.raw.Flags = refMD.Flags
+			sp.raw.Flags &^= flag.IsRoot // unset IsRoot flag if needed
+
+			if tags[string(ext.SpanKind)] == ext.SpanKindRPCServer &&
+				t.options.clientServerSameSpan {
+				sp.raw.SpanID = refMD.SpanID
+				sp.raw.ParentSpanID = refMD.ParentSpanID
+			} else {
+				sp.raw.SpanID = randomID()
+				sp.raw.ParentSpanID = &refMD.SpanID
+			}
+
+			refMD.baggageLock.Lock()
+			if l := len(refMD.Baggage); l > 0 {
+				sp.raw.Baggage = make(map[string]string, len(refMD.Baggage))
+				for k, v := range refMD.Baggage {
+					sp.raw.Baggage[k] = v
+				}
+			}
+			refMD.baggageLock.Unlock()
+			break ReferencesLoop
+		}
+	}
+	if sp.raw.TraceID == 0 {
+		// No parent Span found; allocate new trace and span ids and determine
+		// the Sampled status.
 		sp.raw.TraceID, sp.raw.SpanID = randomID2()
 		sp.raw.Sampled = t.options.shouldSample(sp.raw.TraceID)
 		sp.raw.Flags = flag.IsRoot
-	} else {
-		pr := opts.Parent.(*spanImpl)
-		sp.raw.TraceID = pr.raw.TraceID
-		sp.raw.SpanID = randomID()
-		sp.raw.ParentSpanID = &pr.raw.SpanID
-		sp.raw.Sampled = pr.raw.Sampled
-		sp.raw.Flags = pr.raw.Flags
-		sp.raw.Flags &^= flag.IsRoot // unset IsRoot flag if needed
-		pr.Lock()
-		if l := len(pr.raw.Baggage); l > 0 {
-			sp.raw.Baggage = make(map[string]string, len(pr.raw.Baggage))
-			for k, v := range pr.raw.Baggage {
-				sp.raw.Baggage[k] = v
-			}
-		}
-		pr.Unlock()
 	}
 	if t.options.debugMode {
 		sp.raw.Flags |= flag.Debug
 	}
 	return t.startSpanInternal(
 		sp,
-		opts.OperationName,
+		operationName,
 		startTime,
 		tags,
 	)
@@ -239,7 +297,9 @@ func (t *tracerImpl) startSpanInternal(
 	tags opentracing.Tags,
 ) opentracing.Span {
 	sp.tracer = t
-	sp.event = t.options.newSpanEventListener()
+	if t.options.newSpanEventListener != nil {
+		sp.event = t.options.newSpanEventListener()
+	}
 	sp.raw.Operation = operationName
 	sp.raw.Start = startTime
 	sp.raw.Duration = -1
@@ -256,28 +316,28 @@ type delegatorType struct{}
 // Delegator is the format to use for DelegatingCarrier.
 var Delegator delegatorType
 
-func (t *tracerImpl) Inject(sp opentracing.Span, format interface{}, carrier interface{}) error {
+func (t *tracerImpl) Inject(sc opentracing.SpanContext, format interface{}, carrier interface{}) error {
 	switch format {
 	case opentracing.TextMap:
-		return t.textPropagator.Inject(sp, carrier)
+		return t.textPropagator.Inject(sc, carrier)
 	case opentracing.Binary:
-		return t.binaryPropagator.Inject(sp, carrier)
+		return t.binaryPropagator.Inject(sc, carrier)
 	}
 	if _, ok := format.(delegatorType); ok {
-		return t.accessorPropagator.Inject(sp, carrier)
+		return t.accessorPropagator.Inject(sc, carrier)
 	}
 	return opentracing.ErrUnsupportedFormat
 }
 
-func (t *tracerImpl) Join(operationName string, format interface{}, carrier interface{}) (opentracing.Span, error) {
+func (t *tracerImpl) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
 	switch format {
 	case opentracing.TextMap:
-		return t.textPropagator.Join(operationName, carrier)
+		return t.textPropagator.Extract(carrier)
 	case opentracing.Binary:
-		return t.binaryPropagator.Join(operationName, carrier)
+		return t.binaryPropagator.Extract(carrier)
 	}
 	if _, ok := format.(delegatorType); ok {
-		return t.accessorPropagator.Join(operationName, carrier)
+		return t.accessorPropagator.Extract(carrier)
 	}
 	return nil, opentracing.ErrUnsupportedFormat
 }

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"git.apache.org/thrift.git/lib/go/thrift"
-	"gopkg.in/Shopify/sarama.v1"
+	"github.com/Shopify/sarama"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
@@ -131,7 +131,10 @@ func collectSpan(t *testing.T, c Collector, p *stubProducer, s *zipkincore.Span)
 		case m = <-p.in:
 			rcvd <- true
 			if p.kdown {
-				p.err <- &sarama.ProducerError{m, errors.New("kafka is down")}
+				p.err <- &sarama.ProducerError{
+					Msg: m,
+					Err: errors.New("kafka is down"),
+				}
 			}
 		case <-time.After(100 * time.Millisecond):
 			rcvd <- false

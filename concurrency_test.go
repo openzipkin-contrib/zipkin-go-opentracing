@@ -12,6 +12,7 @@ const op = "test"
 func TestDebugAssertSingleGoroutine(t *testing.T) {
 	tracer, err := NewTracer(
 		NewInMemoryRecorder(),
+		EnableSpanPool(true),
 		DebugAssertSingleGoroutine(true),
 	)
 	if err != nil {
@@ -39,6 +40,7 @@ func TestDebugAssertSingleGoroutine(t *testing.T) {
 func TestDebugAssertUseAfterFinish(t *testing.T) {
 	tracer, err := NewTracer(
 		NewInMemoryRecorder(),
+		EnableSpanPool(true),
 		DebugAssertUseAfterFinish(true),
 	)
 	if err != nil {
@@ -74,6 +76,7 @@ func TestConcurrentUsage(t *testing.T) {
 	var cr CountingRecorder
 	tracer, err := NewTracer(
 		&cr,
+		EnableSpanPool(true),
 		DebugAssertSingleGoroutine(true),
 	)
 	if err != nil {
@@ -89,15 +92,31 @@ func TestConcurrentUsage(t *testing.T) {
 				sp := tracer.StartSpan(op)
 				sp.LogEvent("test event")
 				sp.SetTag("foo", "bar")
-				sp.SetBaggageItem("boo", "far")
+				sp.Context().SetBaggageItem("boo", "far")
 				sp.SetOperationName("x")
-				csp := tracer.StartSpanWithOptions(opentracing.StartSpanOptions{
-					Parent: sp,
-				})
+				csp := tracer.StartSpan("c", opentracing.ChildOf(sp.Context()))
 				csp.Finish()
 				defer sp.Finish()
 			}
 		}()
 	}
 	wg.Wait()
+}
+
+func TestDisableSpanPool(t *testing.T) {
+	var cr CountingRecorder
+	tracer, err := NewTracer(
+		&cr,
+	)
+	if err != nil {
+		t.Fatalf("Unable to create Tracer: %+v", err)
+	}
+
+	parent := tracer.StartSpan("parent")
+	parent.Finish()
+	// This shouldn't panic.
+	child := tracer.StartSpan(
+		"child",
+		opentracing.ChildOf(parent.Context()))
+	child.Finish()
 }

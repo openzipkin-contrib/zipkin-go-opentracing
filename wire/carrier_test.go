@@ -13,7 +13,6 @@ func TestProtobufCarrier(t *testing.T) {
 
 	var traceID, spanID, parentSpanID uint64 = 1, 2, 0
 	sampled := true
-
 	flags := flag.Debug | flag.Sampled | flag.SamplingSet
 	baggageKey, expVal := "key1", "val1"
 

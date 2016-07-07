@@ -17,18 +17,18 @@ type SpanContext struct {
 	// A probabilistically unique identifier for a span.
 	SpanID uint64
 
-	// The SpanID of this Context's parent, or nil if there is no parent.
-	ParentSpanID *uint64
-
 	// Whether the trace is sampled.
 	Sampled bool
 
-	// Flags provides the ability to create and communicate feature flags.
-	Flags flag.Flags
-
-	// The baggage that propagates along with the Trace.
+	// The span's associated baggage.
 	baggageLock sync.Mutex
 	Baggage     map[string]string // initialized on first use
+
+	// The SpanID of this Context's parent, or nil if there is no parent.
+	ParentSpanID *uint64
+
+	// Flags provides the ability to create and communicate feature flags.
+	Flags flag.Flags
 }
 
 // SetBaggageItem is part of the opentracing.SpanContext interface

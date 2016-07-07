@@ -34,6 +34,10 @@ type spanImpl struct {
 	sampled    bool
 }
 
+var spanPool = &sync.Pool{New: func() interface{} {
+	return &spanImpl{}
+}}
+
 func (s *spanImpl) reset() {
 	s.tracer, s.event = nil, nil
 	// Note: Would like to do the following, but then the consumer of RawSpan
@@ -51,7 +55,9 @@ func (s *spanImpl) reset() {
 	// a buffer pool when GC considers them unreachable, which should ease
 	// some of the load. Hard to say how quickly that would be in practice
 	// though.
-	s.raw = RawSpan{}
+	s.raw = RawSpan{
+		SpanContext: &SpanContext{},
+	}
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
@@ -70,8 +76,10 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 	s.Lock()
 	defer s.Unlock()
 	if key == string(ext.SamplingPriority) {
-		s.raw.Sampled = true
-		return s
+		if v, ok := value.(uint16); ok {
+			s.raw.Sampled = v != 0
+			return s
+		}
 	}
 	if s.trim() {
 		return s
@@ -132,10 +140,17 @@ func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
 
 	s.onFinish(s.raw)
 	s.tracer.options.recorder.RecordSpan(s.raw)
+
+	// Last chance to get options before the span is possbily reset.
+	poolEnabled := s.tracer.options.enableSpanPool
 	if s.tracer.options.debugAssertUseAfterFinish {
 		// This makes it much more likely to catch a panic on any subsequent
 		// operation since s.tracer is accessed on every call to `Lock`.
 		s.reset()
+	}
+
+	if poolEnabled {
+		spanPool.Put(s)
 	}
 }
 

@@ -23,8 +23,8 @@ func (p *accessorPropagator) Inject(
 	spanContext opentracing.SpanContext,
 	carrier interface{},
 ) error {
-	ac, ok := carrier.(DelegatingCarrier)
-	if !ok || ac == nil {
+	dc, ok := carrier.(DelegatingCarrier)
+	if !ok || dc == nil {
 		return opentracing.ErrInvalidCarrier
 	}
 	sc, ok := spanContext.(*SpanContext)
@@ -32,10 +32,10 @@ func (p *accessorPropagator) Inject(
 		return opentracing.ErrInvalidSpanContext
 	}
 
-	ac.SetState(sc.TraceID, sc.SpanID, sc.ParentSpanID, sc.Sampled, sc.Flags)
+	dc.SetState(sc.TraceID, sc.SpanID, sc.ParentSpanID, sc.Sampled, sc.Flags)
 
 	for k, v := range sc.Baggage {
-		ac.SetBaggageItem(k, v)
+		dc.SetBaggageItem(k, v)
 	}
 	return nil
 }
@@ -43,12 +43,12 @@ func (p *accessorPropagator) Inject(
 func (p *accessorPropagator) Extract(
 	carrier interface{},
 ) (opentracing.SpanContext, error) {
-	ac, ok := carrier.(DelegatingCarrier)
-	if !ok || ac == nil {
+	dc, ok := carrier.(DelegatingCarrier)
+	if !ok || dc == nil {
 		return nil, opentracing.ErrInvalidCarrier
 	}
 
-	traceID, spanID, parentSpanID, sampled, flags := ac.State()
+	traceID, spanID, parentSpanID, sampled, flags := dc.State()
 	sc := &SpanContext{
 		TraceID:      traceID,
 		SpanID:       spanID,
@@ -56,7 +56,7 @@ func (p *accessorPropagator) Extract(
 		Sampled:      sampled,
 		Flags:        flags,
 	}
-	ac.GetBaggage(func(k, v string) {
+	dc.GetBaggage(func(k, v string) {
 		if sc.Baggage == nil {
 			sc.Baggage = map[string]string{}
 		}

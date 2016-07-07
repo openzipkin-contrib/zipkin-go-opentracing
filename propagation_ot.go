@@ -53,12 +53,12 @@ func (p *textMapPropagator) Inject(
 
 	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.TraceID, 16))
 	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.SpanID, 16))
+	carrier.Set(zipkinSampled, strconv.FormatBool(sc.Sampled))
+
 	if sc.ParentSpanID != nil {
 		// we only set ParentSpanID header if there is a parent span
 		carrier.Set(zipkinParentSpanID, strconv.FormatUint(*sc.ParentSpanID, 16))
 	}
-	// we explicitely set the Sampled header
-	carrier.Set(zipkinSampled, strconv.FormatBool(sc.Sampled))
 	// we only need to inject the debug flag if set. see flag package for details.
 	flags := sc.Flags & flag.Debug
 	carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
@@ -82,8 +82,8 @@ func (p *textMapPropagator) Extract(
 	var (
 		traceID      uint64
 		spanID       uint64
-		parentSpanID *uint64
 		sampled      bool
+		parentSpanID *uint64
 		flags        flag.Flags
 		err          error
 	)
@@ -152,10 +152,10 @@ func (p *textMapPropagator) Extract(
 	return &SpanContext{
 		TraceID:      traceID,
 		SpanID:       spanID,
-		ParentSpanID: parentSpanID,
 		Sampled:      sampled,
-		Flags:        flags,
 		Baggage:      decodedBaggage,
+		ParentSpanID: parentSpanID,
+		Flags:        flags,
 	}, nil
 }
 
@@ -173,10 +173,13 @@ func (p *binaryPropagator) Inject(
 	}
 
 	state := wire.TracerState{}
-	// encode the debug bit
-	flags := sc.Flags & flag.Debug
 	state.TraceId = sc.TraceID
 	state.SpanId = sc.SpanID
+	state.Sampled = sc.Sampled
+	state.BaggageItems = sc.Baggage
+
+	// encode the debug bit
+	flags := sc.Flags & flag.Debug
 	if sc.ParentSpanID != nil {
 		state.ParentSpanId = *sc.ParentSpanID
 	} else {
@@ -184,14 +187,13 @@ func (p *binaryPropagator) Inject(
 		state.ParentSpanId = 0
 		flags |= flag.IsRoot
 	}
-	state.Sampled = sc.Sampled
+
 	// we explicitely inform our sampling state downstream
 	flags |= flag.SamplingSet
 	if sc.Sampled {
 		flags |= flag.Sampled
 	}
 	state.Flags = uint64(flags)
-	state.BaggageItems = sc.Baggage
 
 	b, err := proto.Marshal(&state)
 	if err != nil {
@@ -232,26 +234,26 @@ func (p *binaryPropagator) Extract(
 		return nil, opentracing.ErrSpanContextNotFound
 	}
 
-	protoContext := wire.TracerState{}
-	if err := proto.Unmarshal(buf, &protoContext); err != nil {
+	ctx := wire.TracerState{}
+	if err := proto.Unmarshal(buf, &ctx); err != nil {
 		return nil, opentracing.ErrSpanContextCorrupted
 	}
-	flags := flag.Flags(protoContext.Flags)
+
+	flags := flag.Flags(ctx.Flags)
 	if flags&flag.Sampled == flag.Sampled {
-		protoContext.Sampled = true
+		ctx.Sampled = true
 	}
 	// this propagator expects sampling state to be explicitely propagated by the
 	// upstream service. so set this flag to indentify to tracer it should not
 	// run its sampler in case it is not the root of the trace.
 	flags |= flag.SamplingSet
-	protoContext.Flags = uint64(flags)
 
 	return &SpanContext{
-		TraceID:      protoContext.TraceId,
-		Sampled:      protoContext.Sampled,
-		SpanID:       protoContext.SpanId,
-		ParentSpanID: &protoContext.ParentSpanId,
-		Flags:        flag.Flags(protoContext.Flags),
-		Baggage:      protoContext.BaggageItems,
+		TraceID:      ctx.TraceId,
+		SpanID:       ctx.SpanId,
+		Sampled:      ctx.Sampled,
+		Baggage:      ctx.BaggageItems,
+		ParentSpanID: &ctx.ParentSpanId,
+		Flags:        flags,
 	}, nil
 }

@@ -31,8 +31,12 @@ func (vc *verbatimCarrier) GetBaggage(f func(string, string)) {
 	}
 }
 
-func (vc *verbatimCarrier) SetState(tID, sID uint64, pId *uint64, sampled bool, flags flag.Flags) {
-	vc.SpanContext = zipkintracer.SpanContext{TraceID: tID, SpanID: sID, ParentSpanID: pId, Sampled: sampled, Flags: flags}
+func (vc *verbatimCarrier) SetState(tID, sID uint64, pID *uint64, sampled bool, flags flag.Flags) {
+	vc.SpanContext.TraceID = tID
+	vc.SpanContext.SpanID = sID
+	vc.SpanContext.ParentSpanID = pID
+	vc.SpanContext.Sampled = sampled
+	vc.SpanContext.Flags = flags
 }
 
 func (vc *verbatimCarrier) State() (traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags) {

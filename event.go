@@ -14,11 +14,6 @@ type EventTag struct {
 	Value interface{}
 }
 
-// EventBaggage is received when SetBaggageItem is called.
-type EventBaggage struct {
-	Key, Value string
-}
-
 // EventLog is received when Log (or one of its derivatives) is called.
 type EventLog opentracing.LogData
 
@@ -38,11 +33,6 @@ func (s *spanImpl) onTag(key string, value interface{}) {
 func (s *spanImpl) onLog(ld opentracing.LogData) {
 	if s.event != nil {
 		s.event(EventLog(ld))
-	}
-}
-func (s *spanImpl) onBaggage(key, value string) {
-	if s.event != nil {
-		s.event(EventBaggage{Key: key, Value: value})
 	}
 }
 func (s *spanImpl) onFinish(sp RawSpan) {

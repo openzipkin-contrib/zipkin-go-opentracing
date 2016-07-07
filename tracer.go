@@ -8,6 +8,7 @@ import (
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
@@ -172,20 +173,17 @@ type tracerImpl struct {
 
 func (t *tracerImpl) StartSpan(
 	operationName string,
+	opts ...opentracing.StartSpanOption,
 ) opentracing.Span {
-	return t.StartSpanWithOptions(
-		opentracing.StartSpanOptions{
-			OperationName: operationName,
-		})
+	sso := opentracing.StartSpanOptions{}
+	for _, o := range opts {
+		o.Apply(&sso)
+	}
+	return t.startSpanWithOptions(operationName, sso)
 }
 
-func (t *tracerImpl) getSpan() *spanImpl {
-	sp := spanPool.Get().(*spanImpl)
-	sp.reset()
-	return sp
-}
-
-func (t *tracerImpl) StartSpanWithOptions(
+func (t *tracerImpl) startSpanWithOptions(
+	operationName string,
 	opts opentracing.StartSpanOptions,
 ) opentracing.Span {
 	// Start time.
@@ -198,35 +196,62 @@ func (t *tracerImpl) StartSpanWithOptions(
 	tags := opts.Tags
 
 	// Build the new span. This is the only allocation: We'll return this as
-	// a opentracing.Span.
-	sp := t.getSpan()
-	if opts.Parent == nil {
+	// an opentracing.Span.
+	sp := &spanImpl{
+		raw: RawSpan{
+			SpanContext: &SpanContext{},
+		},
+	}
+	// Look for a parent in the list of References.
+	//
+	// TODO: would be nice if basictracer did something with all
+	// References, not just the first one.
+ReferencesLoop:
+	for _, ref := range opts.References {
+		switch ref.Type {
+		case opentracing.ChildOfRef,
+			opentracing.FollowsFromRef:
+
+			refSC := ref.Referee.(*SpanContext)
+			sp.raw.TraceID = refSC.TraceID
+			sp.raw.ParentSpanID = &refSC.SpanID
+			sp.raw.Sampled = refSC.Sampled
+			sp.raw.Flags = refSC.Flags
+			sp.raw.Flags &^= flag.IsRoot // unset IsRoot flag if needed
+
+			if tags[string(ext.SpanKind)] == ext.SpanKindRPCServer &&
+				t.options.clientServerSameSpan {
+				sp.raw.SpanID = refSC.SpanID
+				sp.raw.ParentSpanID = refSC.ParentSpanID
+			} else {
+				sp.raw.SpanID = randomID()
+				sp.raw.ParentSpanID = &refSC.SpanID
+			}
+
+			refSC.baggageLock.Lock()
+			if l := len(refSC.Baggage); l > 0 {
+				sp.raw.Baggage = make(map[string]string, len(refSC.Baggage))
+				for k, v := range refSC.Baggage {
+					sp.raw.Baggage[k] = v
+				}
+			}
+			refSC.baggageLock.Unlock()
+			break ReferencesLoop
+		}
+	}
+	if sp.raw.TraceID == 0 {
+		// No parent Span found; allocate new trace and span ids and determine
+		// the Sampled status.
 		sp.raw.TraceID, sp.raw.SpanID = randomID2()
 		sp.raw.Sampled = t.options.shouldSample(sp.raw.TraceID)
 		sp.raw.Flags = flag.IsRoot
-	} else {
-		pr := opts.Parent.(*spanImpl)
-		sp.raw.TraceID = pr.raw.TraceID
-		sp.raw.SpanID = randomID()
-		sp.raw.ParentSpanID = &pr.raw.SpanID
-		sp.raw.Sampled = pr.raw.Sampled
-		sp.raw.Flags = pr.raw.Flags
-		sp.raw.Flags &^= flag.IsRoot // unset IsRoot flag if needed
-		pr.Lock()
-		if l := len(pr.raw.Baggage); l > 0 {
-			sp.raw.Baggage = make(map[string]string, len(pr.raw.Baggage))
-			for k, v := range pr.raw.Baggage {
-				sp.raw.Baggage[k] = v
-			}
-		}
-		pr.Unlock()
 	}
 	if t.options.debugMode {
 		sp.raw.Flags |= flag.Debug
 	}
 	return t.startSpanInternal(
 		sp,
-		opts.OperationName,
+		operationName,
 		startTime,
 		tags,
 	)
@@ -256,28 +281,28 @@ type delegatorType struct{}
 // Delegator is the format to use for DelegatingCarrier.
 var Delegator delegatorType
 
-func (t *tracerImpl) Inject(sp opentracing.Span, format interface{}, carrier interface{}) error {
+func (t *tracerImpl) Inject(sc opentracing.SpanContext, format interface{}, carrier interface{}) error {
 	switch format {
 	case opentracing.TextMap:
-		return t.textPropagator.Inject(sp, carrier)
+		return t.textPropagator.Inject(sc, carrier)
 	case opentracing.Binary:
-		return t.binaryPropagator.Inject(sp, carrier)
+		return t.binaryPropagator.Inject(sc, carrier)
 	}
 	if _, ok := format.(delegatorType); ok {
-		return t.accessorPropagator.Inject(sp, carrier)
+		return t.accessorPropagator.Inject(sc, carrier)
 	}
 	return opentracing.ErrUnsupportedFormat
 }
 
-func (t *tracerImpl) Join(operationName string, format interface{}, carrier interface{}) (opentracing.Span, error) {
+func (t *tracerImpl) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
 	switch format {
 	case opentracing.TextMap:
-		return t.textPropagator.Join(operationName, carrier)
+		return t.textPropagator.Extract(carrier)
 	case opentracing.Binary:
-		return t.binaryPropagator.Join(operationName, carrier)
+		return t.binaryPropagator.Extract(carrier)
 	}
 	if _, ok := format.(delegatorType); ok {
-		return t.accessorPropagator.Join(operationName, carrier)
+		return t.accessorPropagator.Extract(carrier)
 	}
 	return nil, opentracing.ErrUnsupportedFormat
 }

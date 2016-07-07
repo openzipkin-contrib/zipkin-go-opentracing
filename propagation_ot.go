@@ -5,7 +5,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -40,42 +39,41 @@ const (
 )
 
 func (p *textMapPropagator) Inject(
-	sp opentracing.Span,
+	spanContext opentracing.SpanContext,
 	opaqueCarrier interface{},
 ) error {
-	sc, ok := sp.(*spanImpl)
+	sc, ok := spanContext.(*SpanContext)
 	if !ok {
-		return opentracing.ErrInvalidSpan
+		return opentracing.ErrInvalidSpanContext
 	}
 	carrier, ok := opaqueCarrier.(opentracing.TextMapWriter)
 	if !ok {
 		return opentracing.ErrInvalidCarrier
 	}
 
-	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.raw.TraceID, 16))
-	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.raw.SpanID, 16))
-	if sc.raw.ParentSpanID != nil {
+	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.TraceID, 16))
+	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.SpanID, 16))
+	if sc.ParentSpanID != nil {
 		// we only set ParentSpanID header if there is a parent span
-		carrier.Set(zipkinParentSpanID, strconv.FormatUint(*sc.raw.ParentSpanID, 16))
+		carrier.Set(zipkinParentSpanID, strconv.FormatUint(*sc.ParentSpanID, 16))
 	}
 	// we explicitely set the Sampled header
-	carrier.Set(zipkinSampled, strconv.FormatBool(sc.raw.Sampled))
+	carrier.Set(zipkinSampled, strconv.FormatBool(sc.Sampled))
 	// we only need to inject the debug flag if set. see flag package for details.
-	flags := sc.raw.Flags & flag.Debug
+	flags := sc.Flags & flag.Debug
 	carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
 
-	sc.Lock()
-	for k, v := range sc.raw.Baggage {
+	sc.baggageLock.Lock()
+	for k, v := range sc.Baggage {
 		carrier.Set(prefixBaggage+k, v)
 	}
-	sc.Unlock()
+	sc.baggageLock.Unlock()
 	return nil
 }
 
-func (p *textMapPropagator) Join(
-	operationName string,
+func (p *textMapPropagator) Extract(
 	opaqueCarrier interface{},
-) (opentracing.Span, error) {
+) (opentracing.SpanContext, error) {
 	carrier, ok := opaqueCarrier.(opentracing.TextMapReader)
 	if !ok {
 		return nil, opentracing.ErrInvalidCarrier
@@ -95,24 +93,24 @@ func (p *textMapPropagator) Join(
 		case zipkinTraceIDLower:
 			traceID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 		case zipkinSpanIDLower:
 			spanID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 		case zipkinParentSpanIDLower:
 			var id uint64
 			id, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 			parentSpanID = &id
 		case zipkinSampledLower:
 			sampled, err = strconv.ParseBool(v)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 			// Sampled header was explicitely set
 			flags |= flag.SamplingSet
@@ -120,7 +118,7 @@ func (p *textMapPropagator) Join(
 			var f uint64
 			f, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {
-				return opentracing.ErrTraceCorrupted
+				return opentracing.ErrSpanContextCorrupted
 			}
 			if flag.Flags(f)&flag.Debug == flag.Debug {
 				flags |= flag.Debug
@@ -141,9 +139,9 @@ func (p *textMapPropagator) Join(
 	}
 	if requiredFieldCount < tracerStateFieldCount {
 		if requiredFieldCount == 0 {
-			return nil, opentracing.ErrTraceNotFound
+			return nil, opentracing.ErrSpanContextNotFound
 		}
-		return nil, opentracing.ErrTraceCorrupted
+		return nil, opentracing.ErrSpanContextCorrupted
 	}
 
 	// check if Sample state was communicated through the Flags bitset
@@ -151,39 +149,23 @@ func (p *textMapPropagator) Join(
 		sampled = true
 	}
 
-	sp := p.tracer.getSpan()
-	context := Context{
-		TraceID: traceID,
-		Sampled: sampled,
-		Flags:   flags,
-	}
-	if p.tracer.options.clientServerSameSpan {
-		context.SpanID = spanID
-		context.ParentSpanID = parentSpanID
-	} else {
-		context.SpanID = randomID()
-		context.ParentSpanID = &spanID
-	}
-	sp.raw = RawSpan{
-		Context: context,
-		Baggage: decodedBaggage,
-	}
-
-	return p.tracer.startSpanInternal(
-		sp,
-		operationName,
-		time.Now(),
-		nil,
-	), nil
+	return &SpanContext{
+		TraceID:      traceID,
+		SpanID:       spanID,
+		ParentSpanID: parentSpanID,
+		Sampled:      sampled,
+		Flags:        flags,
+		Baggage:      decodedBaggage,
+	}, nil
 }
 
 func (p *binaryPropagator) Inject(
-	sp opentracing.Span,
+	spanContext opentracing.SpanContext,
 	opaqueCarrier interface{},
 ) error {
-	sc, ok := sp.(*spanImpl)
+	sc, ok := spanContext.(*SpanContext)
 	if !ok {
-		return opentracing.ErrInvalidSpan
+		return opentracing.ErrInvalidSpanContext
 	}
 	carrier, ok := opaqueCarrier.(io.Writer)
 	if !ok {
@@ -192,24 +174,24 @@ func (p *binaryPropagator) Inject(
 
 	state := wire.TracerState{}
 	// encode the debug bit
-	flags := sc.raw.Flags & flag.Debug
-	state.TraceId = sc.raw.TraceID
-	state.SpanId = sc.raw.SpanID
-	if sc.raw.ParentSpanID != nil {
-		state.ParentSpanId = *sc.raw.ParentSpanID
+	flags := sc.Flags & flag.Debug
+	state.TraceId = sc.TraceID
+	state.SpanId = sc.SpanID
+	if sc.ParentSpanID != nil {
+		state.ParentSpanId = *sc.ParentSpanID
 	} else {
 		// root span...
 		state.ParentSpanId = 0
 		flags |= flag.IsRoot
 	}
-	state.Sampled = sc.raw.Sampled
+	state.Sampled = sc.Sampled
 	// we explicitely inform our sampling state downstream
 	flags |= flag.SamplingSet
-	if sc.raw.Sampled {
+	if sc.Sampled {
 		flags |= flag.Sampled
 	}
 	state.Flags = uint64(flags)
-	state.BaggageItems = sc.raw.Baggage
+	state.BaggageItems = sc.Baggage
 
 	b, err := proto.Marshal(&state)
 	if err != nil {
@@ -226,10 +208,9 @@ func (p *binaryPropagator) Inject(
 	return err
 }
 
-func (p *binaryPropagator) Join(
-	operationName string,
+func (p *binaryPropagator) Extract(
 	opaqueCarrier interface{},
-) (opentracing.Span, error) {
+) (opentracing.SpanContext, error) {
 	carrier, ok := opaqueCarrier.(io.Reader)
 	if !ok {
 		return nil, opentracing.ErrInvalidCarrier
@@ -241,58 +222,36 @@ func (p *binaryPropagator) Join(
 	// the exact amount of bytes into it.
 	var length uint32
 	if err := binary.Read(carrier, binary.BigEndian, &length); err != nil {
-		return nil, opentracing.ErrTraceCorrupted
+		return nil, opentracing.ErrSpanContextCorrupted
 	}
 	buf := make([]byte, length)
 	if n, err := carrier.Read(buf); err != nil {
 		if n > 0 {
-			return nil, opentracing.ErrTraceCorrupted
+			return nil, opentracing.ErrSpanContextCorrupted
 		}
-		return nil, opentracing.ErrTraceNotFound
+		return nil, opentracing.ErrSpanContextNotFound
 	}
 
-	ctx := wire.TracerState{}
-	if err := proto.Unmarshal(buf, &ctx); err != nil {
-		return nil, opentracing.ErrTraceCorrupted
+	protoContext := wire.TracerState{}
+	if err := proto.Unmarshal(buf, &protoContext); err != nil {
+		return nil, opentracing.ErrSpanContextCorrupted
 	}
-
-	if !p.tracer.options.clientServerSameSpan {
-		ctx.ParentSpanId = 0
-	}
-
-	sp := p.tracer.getSpan()
-	context := Context{
-		TraceID: ctx.TraceId,
-		Sampled: ctx.Sampled,
-	}
-	if p.tracer.options.clientServerSameSpan {
-		context.SpanID = ctx.SpanId
-		context.ParentSpanID = &ctx.ParentSpanId
-	} else {
-		context.SpanID = randomID()
-		context.ParentSpanID = &ctx.SpanId
-	}
-	flags := flag.Flags(ctx.Flags)
-	if flags&flag.IsRoot == flag.IsRoot {
-		context.ParentSpanID = nil
-	}
+	flags := flag.Flags(protoContext.Flags)
 	if flags&flag.Sampled == flag.Sampled {
-		context.Sampled = true
+		protoContext.Sampled = true
 	}
 	// this propagator expects sampling state to be explicitely propagated by the
 	// upstream service. so set this flag to indentify to tracer it should not
 	// run its sampler in case it is not the root of the trace.
 	flags |= flag.SamplingSet
-	context.Flags = flags
-	sp.raw = RawSpan{
-		Context: context,
-		Baggage: ctx.BaggageItems,
-	}
+	protoContext.Flags = uint64(flags)
 
-	return p.tracer.startSpanInternal(
-		sp,
-		operationName,
-		time.Now(),
-		nil,
-	), nil
+	return &SpanContext{
+		TraceID:      protoContext.TraceId,
+		Sampled:      protoContext.Sampled,
+		SpanID:       protoContext.SpanId,
+		ParentSpanID: &protoContext.ParentSpanId,
+		Flags:        flag.Flags(protoContext.Flags),
+		Baggage:      protoContext.BaggageItems,
+	}, nil
 }

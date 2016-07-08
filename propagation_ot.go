@@ -112,7 +112,7 @@ func (p *textMapPropagator) Extract(
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
-			// Sampled header was explicitely set
+			// Sampled header was explicitly set
 			flags |= flag.SamplingSet
 		case zipkinFlagsLower:
 			var f uint64
@@ -188,7 +188,7 @@ func (p *binaryPropagator) Inject(
 		flags |= flag.IsRoot
 	}
 
-	// we explicitely inform our sampling state downstream
+	// we explicitly inform our sampling state downstream
 	flags |= flag.SamplingSet
 	if sc.Sampled {
 		flags |= flag.Sampled
@@ -243,7 +243,7 @@ func (p *binaryPropagator) Extract(
 	if flags&flag.Sampled == flag.Sampled {
 		ctx.Sampled = true
 	}
-	// this propagator expects sampling state to be explicitely propagated by the
+	// this propagator expects sampling state to be explicitly propagated by the
 	// upstream service. so set this flag to indentify to tracer it should not
 	// run its sampler in case it is not the root of the trace.
 	flags |= flag.SamplingSet

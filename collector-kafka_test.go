@@ -166,8 +166,8 @@ func deserializeSpan(t *testing.T, e sarama.Encoder) *zipkincore.Span {
 	}
 	s := zipkincore.NewSpan()
 	mb := thrift.NewTMemoryBufferLen(len(bytes))
-	mb.Write(bytes)
-	mb.Flush()
+	_, _ = mb.Write(bytes)
+	_ = mb.Flush()
 	pt := thrift.NewTBinaryProtocolTransport(mb)
 	err = s.Read(pt)
 	if err != nil {

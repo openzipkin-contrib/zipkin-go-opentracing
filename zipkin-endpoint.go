@@ -16,29 +16,45 @@ func makeEndpoint(hostport, serviceName string) *zipkincore.Endpoint {
 	if err != nil {
 		return nil
 	}
+
 	portInt, err := strconv.ParseInt(port, 10, 16)
 	if err != nil {
 		return nil
 	}
+
 	addrs, err := net.LookupIP(host)
 	if err != nil {
 		return nil
 	}
-	// we need the first IPv4 address.
-	var addr net.IP
+
+	var addr4, addr16 net.IP
 	for i := range addrs {
-		addr = addrs[i].To4()
-		if addr != nil {
+		if addr := addrs[i].To4(); addr == nil {
+			if addr16 == nil {
+				addr16 = addrs[i].To16() // IPv6 - 16 bytes
+			}
+		} else {
+			if addr4 == nil {
+				addr4 = addr // IPv4 - 4 bytes
+			}
+		}
+		if addr16 != nil && addr4 != nil {
 			break
 		}
 	}
-	if addr == nil {
-		// none of the returned addresses is IPv4.
-		return nil
+	if addr4 == nil {
+		if addr16 == nil {
+			return nil
+		}
+		// we have an IPv6 but no IPv4, code IPv4 as 0 (none found)
+		addr4 = []byte("\x00\x00\x00\x00")
 	}
+
 	endpoint := zipkincore.NewEndpoint()
-	endpoint.Ipv4 = (int32)(binary.BigEndian.Uint32(addr))
+	endpoint.Ipv4 = (int32)(binary.BigEndian.Uint32(addr4))
+	endpoint.Ipv6 = []byte(addr16)
 	endpoint.Port = int16(portInt)
 	endpoint.ServiceName = serviceName
+
 	return endpoint
 }

@@ -99,7 +99,7 @@ func (c *ScribeCollector) loop() {
 		case <-c.sendc:
 			c.nextSend = time.Now().Add(c.batchInterval)
 			if err := c.send(c.batch); err != nil {
-				c.logger.Log("err", err.Error())
+				_ = c.logger.Log("err", err.Error())
 			}
 			c.batch = c.batch[:0]
 		case <-c.quit:
@@ -165,7 +165,7 @@ func scribeClientFactory(addr string, timeout time.Duration) func() (scribe.Scri
 		socket := thrift.NewTSocketFromAddrTimeout(a, timeout)
 		transport := thrift.NewTFramedTransport(socket)
 		if err := transport.Open(); err != nil {
-			socket.Close()
+			_ = socket.Close()
 			return nil, err
 		}
 		proto := thrift.NewTBinaryProtocolTransport(transport)

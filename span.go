@@ -31,7 +31,6 @@ type spanImpl struct {
 	sync.Mutex // protects the fields below
 	raw        RawSpan
 	Endpoint   *zipkincore.Endpoint
-	sampled    bool
 }
 
 var spanPool = &sync.Pool{New: func() interface{} {

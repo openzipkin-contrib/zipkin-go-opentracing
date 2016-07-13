@@ -6,6 +6,7 @@ package zipkincore
 import (
 	"bytes"
 	"fmt"
+
 	"git.apache.org/thrift.git/lib/go/thrift"
 )
 
@@ -32,6 +33,7 @@ const HTTP_STATUS_CODE = "http.status_code"
 const HTTP_REQUEST_SIZE = "http.request.size"
 const HTTP_RESPONSE_SIZE = "http.response.size"
 const LOCAL_COMPONENT = "lc"
+const ERROR = "error"
 const CLIENT_ADDR = "ca"
 const SERVER_ADDR = "sa"
 

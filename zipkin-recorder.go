@@ -50,6 +50,13 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 		id := int64(*sp.ParentSpanID)
 		parentSpanID = &id
 	}
+
+	// since we always time our spans we will round up to 1 microsecond if the
+	// span took less.
+	if duration == 0 {
+		duration = 1
+	}
+
 	span := &zipkincore.Span{
 		Name:      sp.Operation,
 		ID:        int64(sp.SpanID),
@@ -61,10 +68,10 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 	}
 	if kind, ok := sp.Tags[string(otext.SpanKind)]; ok {
 		switch kind {
-		case otext.SpanKindRPCClient:
+		case otext.SpanKindRPCClient, otext.SpanKindRPCClientEnum:
 			annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
 			annotate(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
-		case otext.SpanKindRPCServer:
+		case otext.SpanKindRPCServer, otext.SpanKindRPCServerEnum:
 			annotate(span, sp.Start, zipkincore.SERVER_RECV, r.endpoint)
 			annotate(span, sp.Start.Add(sp.Duration), zipkincore.SERVER_SEND, r.endpoint)
 		case SpanKindResource:
@@ -74,17 +81,23 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 			}
 			host, ok := sp.Tags[string(otext.PeerHostname)].(string)
 			if !ok {
-				ip := make([]byte, 4)
-				binary.BigEndian.PutUint32(ip, uint32(r.endpoint.GetIpv4()))
-				host = net.IP(ip).To4().String()
+				if r.endpoint.GetIpv4() > 0 {
+					ip := make([]byte, 4)
+					binary.BigEndian.PutUint32(ip, uint32(r.endpoint.GetIpv4()))
+					host = net.IP(ip).To4().String()
+				} else {
+					ip := r.endpoint.GetIpv6()
+					host = net.IP(ip).String()
+				}
 			}
+			var sPort string
 			port, ok := sp.Tags[string(otext.PeerPort)]
 			if !ok {
-				port = strconv.FormatInt(int64(r.endpoint.GetPort()), 10)
+				sPort = strconv.FormatInt(int64(r.endpoint.GetPort()), 10)
 			} else {
-				port = strconv.FormatInt(int64(port.(uint16)), 10)
+				sPort = strconv.FormatInt(int64(port.(uint16)), 10)
 			}
-			re := makeEndpoint(fmt.Sprintf("%s:%s", host, port), serviceName.(string))
+			re := makeEndpoint(net.JoinHostPort(host, sPort), serviceName.(string))
 			annotateBinary(span, zipkincore.SERVER_ADDR, serviceName, re)
 			annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
 			annotate(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
@@ -105,8 +118,7 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 		}
 		annotate(span, spLog.Timestamp, spLog.Event, r.endpoint)
 	}
-
-	r.collector.Collect(span)
+	_ = r.collector.Collect(span)
 }
 
 // annotate annotates the span with the given value.
@@ -164,7 +176,7 @@ func annotateBinary(span *zipkincore.Span, key string, value interface{}, host *
 	case uint32:
 		a = zipkincore.AnnotationType_I32
 		b = make([]byte, 4)
-		binary.BigEndian.PutUint32(b, uint32(v))
+		binary.BigEndian.PutUint32(b, v)
 	case int64:
 		a = zipkincore.AnnotationType_I64
 		b = make([]byte, 8)
@@ -180,7 +192,7 @@ func annotateBinary(span *zipkincore.Span, key string, value interface{}, host *
 	case uint64:
 		a = zipkincore.AnnotationType_I64
 		b = make([]byte, 8)
-		binary.BigEndian.PutUint64(b, uint64(v))
+		binary.BigEndian.PutUint64(b, v)
 	case float32:
 		a = zipkincore.AnnotationType_DOUBLE
 		b = make([]byte, 8)

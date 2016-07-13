@@ -113,10 +113,12 @@ func (p *AnnotationType) UnmarshalText(text []byte) error {
 // Particularly clients may not have a reliable service name at ingest. One
 // approach is to set service_name to "" at ingest, and later assign a
 // better label based on binary annotations, such as user agent.
+//  - Ipv6: IPv6 host address packed into 16 bytes. Ex Inet6Address.getBytes()
 type Endpoint struct {
 	Ipv4        int32  `thrift:"ipv4,1" json:"ipv4"`
 	Port        int16  `thrift:"port,2" json:"port"`
 	ServiceName string `thrift:"service_name,3" json:"service_name"`
+	Ipv6        []byte `thrift:"ipv6,4" json:"ipv6,omitempty"`
 }
 
 func NewEndpoint() *Endpoint {
@@ -134,6 +136,16 @@ func (p *Endpoint) GetPort() int16 {
 func (p *Endpoint) GetServiceName() string {
 	return p.ServiceName
 }
+
+var Endpoint_Ipv6_DEFAULT []byte
+
+func (p *Endpoint) GetIpv6() []byte {
+	return p.Ipv6
+}
+func (p *Endpoint) IsSetIpv6() bool {
+	return p.Ipv6 != nil
+}
+
 func (p *Endpoint) Read(iprot thrift.TProtocol) error {
 	if _, err := iprot.ReadStructBegin(); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T read error: ", p), err)
@@ -158,6 +170,10 @@ func (p *Endpoint) Read(iprot thrift.TProtocol) error {
 			}
 		case 3:
 			if err := p.readField3(iprot); err != nil {
+				return err
+			}
+		case 4:
+			if err := p.readField4(iprot); err != nil {
 				return err
 			}
 		default:
@@ -202,6 +218,15 @@ func (p *Endpoint) readField3(iprot thrift.TProtocol) error {
 	return nil
 }
 
+func (p *Endpoint) readField4(iprot thrift.TProtocol) error {
+	if v, err := iprot.ReadBinary(); err != nil {
+		return thrift.PrependError("error reading field 4: ", err)
+	} else {
+		p.Ipv6 = v
+	}
+	return nil
+}
+
 func (p *Endpoint) Write(oprot thrift.TProtocol) error {
 	if err := oprot.WriteStructBegin("Endpoint"); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write struct begin error: ", p), err)
@@ -213,6 +238,9 @@ func (p *Endpoint) Write(oprot thrift.TProtocol) error {
 		return err
 	}
 	if err := p.writeField3(oprot); err != nil {
+		return err
+	}
+	if err := p.writeField4(oprot); err != nil {
 		return err
 	}
 	if err := oprot.WriteFieldStop(); err != nil {
@@ -259,6 +287,21 @@ func (p *Endpoint) writeField3(oprot thrift.TProtocol) (err error) {
 	}
 	if err := oprot.WriteFieldEnd(); err != nil {
 		return thrift.PrependError(fmt.Sprintf("%T write field end error 3:service_name: ", p), err)
+	}
+	return err
+}
+
+func (p *Endpoint) writeField4(oprot thrift.TProtocol) (err error) {
+	if p.IsSetIpv6() {
+		if err := oprot.WriteFieldBegin("ipv6", thrift.STRING, 4); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field begin error 4:ipv6: ", p), err)
+		}
+		if err := oprot.WriteBinary(p.Ipv6); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T.ipv6 (4) field write error: ", p), err)
+		}
+		if err := oprot.WriteFieldEnd(); err != nil {
+			return thrift.PrependError(fmt.Sprintf("%T write field end error 4:ipv6: ", p), err)
+		}
 	}
 	return err
 }
@@ -723,7 +766,8 @@ func (p *BinaryAnnotation) String() string {
 // precedes a timestamp. This is possible when..
 //  - The span is in-flight (ex not yet received a timestamp)
 //  - The span's start event was lost
-//  - Duration: Measurement in microseconds of the critical path, if known.
+//  - Duration: Measurement in microseconds of the critical path, if known. Durations of
+// less than one microsecond must be rounded up to 1 microsecond.
 //
 // This value should be set directly, as opposed to implicitly via annotation
 // timestamps. Doing so encourages precision decoupled from problems of

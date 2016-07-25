@@ -245,7 +245,7 @@ ReferencesLoop:
 		case opentracing.ChildOfRef,
 			opentracing.FollowsFromRef:
 
-			refMD := ref.Referee.(*SpanContext)
+			refMD := ref.ReferencedContext.(*SpanContext)
 			sp.raw.TraceID = refMD.TraceID
 			sp.raw.ParentSpanID = &refMD.SpanID
 			sp.raw.Sampled = refMD.Sampled

@@ -43,11 +43,11 @@ func (s *spanImpl) reset() {
 	// (the recorder) needs to make sure that they're not holding on to the
 	// baggage or logs when they return (i.e. they need to copy if they care):
 	//
-	// logs, baggage := s.raw.Logs[:0], s.raw.Baggage
-	// for k := range baggage {
-	// 	delete(baggage, k)
-	// }
-	// s.raw.Logs, s.raw.Baggage = logs, baggage
+	//     logs, baggage := s.raw.Logs[:0], s.raw.Baggage
+	//     for k := range baggage {
+	//         delete(baggage, k)
+	//     }
+	//     s.raw.Logs, s.raw.Baggage = logs, baggage
 	//
 	// That's likely too much to ask for. But there is some magic we should
 	// be able to do with `runtime.SetFinalizer` to reclaim that memory into

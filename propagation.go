@@ -31,9 +31,7 @@ func (p *accessorPropagator) Inject(
 	if !ok {
 		return opentracing.ErrInvalidSpanContext
 	}
-
 	dc.SetState(sc.TraceID, sc.SpanID, sc.ParentSpanID, sc.Sampled, sc.Flags)
-
 	for k, v := range sc.Baggage {
 		dc.SetBaggageItem(k, v)
 	}

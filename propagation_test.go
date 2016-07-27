@@ -57,12 +57,13 @@ func TestSpanPropagator(t *testing.T) {
 	sp := tracer.StartSpan(op)
 	sp.Context().SetBaggageItem("foo", "bar")
 
-	tmc := opentracing.HTTPHeaderTextMapCarrier(http.Header{})
+	tmc := opentracing.HTTPHeadersCarrier(http.Header{})
 	tests := []struct {
 		typ, carrier interface{}
 	}{
 		{zipkintracer.Delegator, zipkintracer.DelegatingCarrier(&verbatimCarrier{b: map[string]string{}})},
 		{opentracing.Binary, &bytes.Buffer{}},
+		{opentracing.HTTPHeaders, tmc},
 		{opentracing.TextMap, tmc},
 	}
 
@@ -74,8 +75,10 @@ func TestSpanPropagator(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		childSpan := tracer.StartSpan(op, opentracing.ChildOf(extractedContext))
-		childSpan.Finish()
+		child := tracer.StartSpan(
+			op,
+			opentracing.ChildOf(extractedContext))
+		child.Finish()
 	}
 	sp.Finish()
 

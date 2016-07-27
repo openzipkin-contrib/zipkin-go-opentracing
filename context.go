@@ -31,11 +31,27 @@ type SpanContext struct {
 	Flags flag.Flags
 }
 
-// SetBaggageItem is part of the opentracing.SpanContext interface
-func (c *SpanContext) SetBaggageItem(key, val string) opentracing.SpanContext {
+// BaggageItem belongs to the opentracing.SpanContext interface
+func (c *SpanContext) BaggageItem(key string) string {
+	// TODO: if we want to support onBaggage, need a pointer to the bt.Span.
+	//   s.onBaggage(canonicalKey, val)
+	//   if s.trim() {
+	//   	return s
+	//   }
+
 	c.baggageLock.Lock()
 	defer c.baggageLock.Unlock()
 
+	if c.Baggage == nil {
+		return ""
+	}
+	return c.Baggage[key]
+}
+
+// SetBaggageItem belongs to the opentracing.SpanContext interface
+func (c *SpanContext) SetBaggageItem(key, val string) opentracing.SpanContext {
+	c.baggageLock.Lock()
+	defer c.baggageLock.Unlock()
 	if c.Baggage == nil {
 		c.Baggage = make(map[string]string)
 	}
@@ -43,15 +59,7 @@ func (c *SpanContext) SetBaggageItem(key, val string) opentracing.SpanContext {
 	return c
 }
 
-// BaggageItem is part of the opentracing.SpanContext interface
-func (c *SpanContext) BaggageItem(key string) string {
-	c.baggageLock.Lock()
-	defer c.baggageLock.Unlock()
-
-	return c.Baggage[key]
-}
-
-// ForeachBaggageItem is part of the opentracing.SpanContext interface
+// ForeachBaggageItem belongs to the opentracing.SpanContext interface
 func (c *SpanContext) ForeachBaggageItem(handler func(k, v string) bool) {
 	c.baggageLock.Lock()
 	defer c.baggageLock.Unlock()

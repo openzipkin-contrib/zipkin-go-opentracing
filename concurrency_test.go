@@ -94,7 +94,9 @@ func TestConcurrentUsage(t *testing.T) {
 				sp.SetTag("foo", "bar")
 				sp.Context().SetBaggageItem("boo", "far")
 				sp.SetOperationName("x")
-				csp := tracer.StartSpan("c", opentracing.ChildOf(sp.Context()))
+				csp := tracer.StartSpan(
+					"csp",
+					opentracing.ChildOf(sp.Context()))
 				csp.Finish()
 				defer sp.Finish()
 			}

@@ -38,7 +38,7 @@ func NewRecorder(c Collector, debug bool, hostPort, serviceName string) SpanReco
 // RecordSpan converts a RawSpan into the Zipkin representation of a span
 // and records it to the underlying collector.
 func (r *Recorder) RecordSpan(sp RawSpan) {
-	if !sp.Sampled {
+	if !sp.Context.Sampled {
 		return
 	}
 	var (
@@ -46,8 +46,8 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 		timestamp    = sp.Start.UnixNano() / 1e3
 		duration     = sp.Duration.Nanoseconds() / 1e3
 	)
-	if sp.ParentSpanID != nil {
-		id := int64(*sp.ParentSpanID)
+	if sp.Context.ParentSpanID != nil {
+		id := int64(*sp.Context.ParentSpanID)
 		parentSpanID = &id
 	}
 
@@ -59,10 +59,10 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 
 	span := &zipkincore.Span{
 		Name:      sp.Operation,
-		ID:        int64(sp.SpanID),
-		TraceID:   int64(sp.TraceID),
+		ID:        int64(sp.Context.SpanID),
+		TraceID:   int64(sp.Context.TraceID),
 		ParentID:  parentSpanID,
-		Debug:     r.debug || (sp.Flags&flag.Debug == flag.Debug),
+		Debug:     r.debug || (sp.Context.Flags&flag.Debug == flag.Debug),
 		Timestamp: &timestamp,
 		Duration:  &duration,
 	}
@@ -98,7 +98,11 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 				sPort = strconv.FormatInt(int64(port.(uint16)), 10)
 			}
 			re := makeEndpoint(net.JoinHostPort(host, sPort), serviceName.(string))
-			annotateBinary(span, zipkincore.SERVER_ADDR, serviceName, re)
+			if re != nil {
+				annotateBinary(span, zipkincore.SERVER_ADDR, serviceName, re)
+			} else {
+				fmt.Printf("endpoint creation failed: host: %q port: %q", host, sPort)
+			}
 			annotate(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
 			annotate(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
 		default:

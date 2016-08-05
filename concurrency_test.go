@@ -92,7 +92,7 @@ func TestConcurrentUsage(t *testing.T) {
 				sp := tracer.StartSpan(op)
 				sp.LogEvent("test event")
 				sp.SetTag("foo", "bar")
-				sp.Context().SetBaggageItem("boo", "far")
+				sp.SetBaggageItem("boo", "far")
 				sp.SetOperationName("x")
 				csp := tracer.StartSpan(
 					"csp",

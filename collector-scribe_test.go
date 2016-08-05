@@ -116,7 +116,9 @@ func newScribeServer(t *testing.T) *scribeServer {
 		protocolFactory,
 	)
 
-	go server.Serve()
+	go func() {
+		_ = server.Serve()
+	}()
 
 	deadline := time.Now().Add(time.Second)
 	for !canConnect(port) {

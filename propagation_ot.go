@@ -42,7 +42,7 @@ func (p *textMapPropagator) Inject(
 	spanContext opentracing.SpanContext,
 	opaqueCarrier interface{},
 ) error {
-	sc, ok := spanContext.(*SpanContext)
+	sc, ok := spanContext.(SpanContext)
 	if !ok {
 		return opentracing.ErrInvalidSpanContext
 	}
@@ -50,7 +50,6 @@ func (p *textMapPropagator) Inject(
 	if !ok {
 		return opentracing.ErrInvalidCarrier
 	}
-
 	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.TraceID, 16))
 	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.SpanID, 16))
 	carrier.Set(zipkinSampled, strconv.FormatBool(sc.Sampled))
@@ -63,11 +62,9 @@ func (p *textMapPropagator) Inject(
 	flags := sc.Flags & flag.Debug
 	carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
 
-	sc.baggageLock.Lock()
 	for k, v := range sc.Baggage {
 		carrier.Set(prefixBaggage+k, v)
 	}
-	sc.baggageLock.Unlock()
 	return nil
 }
 
@@ -149,7 +146,7 @@ func (p *textMapPropagator) Extract(
 		sampled = true
 	}
 
-	return &SpanContext{
+	return SpanContext{
 		TraceID:      traceID,
 		SpanID:       spanID,
 		Sampled:      sampled,
@@ -163,7 +160,7 @@ func (p *binaryPropagator) Inject(
 	spanContext opentracing.SpanContext,
 	opaqueCarrier interface{},
 ) error {
-	sc, ok := spanContext.(*SpanContext)
+	sc, ok := spanContext.(SpanContext)
 	if !ok {
 		return opentracing.ErrInvalidSpanContext
 	}
@@ -248,7 +245,7 @@ func (p *binaryPropagator) Extract(
 	// run its sampler in case it is not the root of the trace.
 	flags |= flag.SamplingSet
 
-	return &SpanContext{
+	return SpanContext{
 		TraceID:      ctx.TraceId,
 		SpanID:       ctx.SpanId,
 		Sampled:      ctx.Sampled,

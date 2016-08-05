@@ -27,7 +27,7 @@ func (p *accessorPropagator) Inject(
 	if !ok || dc == nil {
 		return opentracing.ErrInvalidCarrier
 	}
-	sc, ok := spanContext.(*SpanContext)
+	sc, ok := spanContext.(SpanContext)
 	if !ok {
 		return opentracing.ErrInvalidSpanContext
 	}
@@ -47,11 +47,12 @@ func (p *accessorPropagator) Extract(
 	}
 
 	traceID, spanID, parentSpanID, sampled, flags := dc.State()
-	sc := &SpanContext{
+	sc := SpanContext{
 		TraceID:      traceID,
 		SpanID:       spanID,
-		ParentSpanID: parentSpanID,
 		Sampled:      sampled,
+		Baggage:      nil,
+		ParentSpanID: parentSpanID,
 		Flags:        flags,
 	}
 	dc.GetBaggage(func(k, v string) {

@@ -26,7 +26,7 @@ func executeOps(sp opentracing.Span, numEvent, numTag, numItems int) {
 		sp.SetTag(tags[j], nil)
 	}
 	for j := 0; j < numItems; j++ {
-		sp.Context().SetBaggageItem(tags[j], tags[j])
+		sp.SetBaggageItem(tags[j], tags[j])
 	}
 }
 
@@ -82,14 +82,6 @@ func BenchmarkSpan_100BaggageItems(b *testing.B) {
 func BenchmarkTrimmedSpan_100Events_100Tags_100BaggageItems(b *testing.B) {
 	var r CountingRecorder
 	t, err := NewTracer(
-		&r,
-		TrimUnsampledSpans(true),
-		WithSampler(neverSample),
-	)
-	if err != nil {
-		b.Fatalf("Unable to create Tracer: %+v", err)
-	}
-	t, err = NewTracer(
 		&r,
 		TrimUnsampledSpans(true),
 		WithSampler(neverSample),
@@ -153,8 +145,8 @@ func benchmarkExtract(b *testing.B, format opentracing.BuiltinFormat, numItems i
 		b.Fatal(err)
 	}
 
-	// We create a new bytes.Buffer every time for tracer.Extract() to keep this
-	// benchmark realistic.
+	// We create a new bytes.Buffer every time for tracer.Extract() to keep
+	// this benchmark realistic.
 	var rawBinaryBytes []byte
 	if format == opentracing.Binary {
 		rawBinaryBytes = carrier.(*bytes.Buffer).Bytes()

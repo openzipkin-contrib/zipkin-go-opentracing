@@ -40,7 +40,11 @@ type TracerOptions struct {
 	// attaching external code to trace events. See NetTraceIntegrator for a
 	// practical example, and event.go for the list of possible events.
 	newSpanEventListener func() func(SpanEvent)
-	logger               Logger
+	// dropAllLogs turns log events on all Spans into no-ops.
+	// If NewSpanEventListener is set, the callbacks will still fire.
+	dropAllLogs bool
+	// logger ...
+	logger Logger
 	// debugAssertSingleGoroutine internally records the ID of the goroutine
 	// creating each Span and verifies that no operation is carried out on
 	// it on a different goroutine.
@@ -107,6 +111,14 @@ func WithSampler(sampler Sampler) TracerOption {
 func TrimUnsampledSpans(trim bool) TracerOption {
 	return func(opts *TracerOptions) error {
 		opts.trimUnsampledSpans = trim
+		return nil
+	}
+}
+
+// DropAllLogs option
+func DropAllLogs(dropAllLogs bool) TracerOption {
+	return func(opts *TracerOptions) error {
+		opts.dropAllLogs = dropAllLogs
 		return nil
 	}
 }
@@ -212,11 +224,7 @@ func (t *tracerImpl) getSpan() *spanImpl {
 		sp.reset()
 		return sp
 	}
-	return &spanImpl{
-		raw: RawSpan{
-			SpanContext: &SpanContext{},
-		},
-	}
+	return &spanImpl{}
 }
 
 func (t *tracerImpl) startSpanWithOptions(
@@ -245,42 +253,40 @@ ReferencesLoop:
 		case opentracing.ChildOfRef,
 			opentracing.FollowsFromRef:
 
-			refMD := ref.ReferencedContext.(*SpanContext)
-			sp.raw.TraceID = refMD.TraceID
-			sp.raw.ParentSpanID = &refMD.SpanID
-			sp.raw.Sampled = refMD.Sampled
-			sp.raw.Flags = refMD.Flags
-			sp.raw.Flags &^= flag.IsRoot // unset IsRoot flag if needed
+			refCtx := ref.ReferencedContext.(SpanContext)
+			sp.raw.Context.TraceID = refCtx.TraceID
+			sp.raw.Context.ParentSpanID = &refCtx.SpanID
+			sp.raw.Context.Sampled = refCtx.Sampled
+			sp.raw.Context.Flags = refCtx.Flags
+			sp.raw.Context.Flags &^= flag.IsRoot // unset IsRoot flag if needed
 
 			if tags[string(ext.SpanKind)] == ext.SpanKindRPCServer &&
 				t.options.clientServerSameSpan {
-				sp.raw.SpanID = refMD.SpanID
-				sp.raw.ParentSpanID = refMD.ParentSpanID
+				sp.raw.Context.SpanID = refCtx.SpanID
+				sp.raw.Context.ParentSpanID = refCtx.ParentSpanID
 			} else {
-				sp.raw.SpanID = randomID()
-				sp.raw.ParentSpanID = &refMD.SpanID
+				sp.raw.Context.SpanID = randomID()
+				sp.raw.Context.ParentSpanID = &refCtx.SpanID
 			}
 
-			refMD.baggageLock.Lock()
-			if l := len(refMD.Baggage); l > 0 {
-				sp.raw.Baggage = make(map[string]string, len(refMD.Baggage))
-				for k, v := range refMD.Baggage {
-					sp.raw.Baggage[k] = v
+			if l := len(refCtx.Baggage); l > 0 {
+				sp.raw.Context.Baggage = make(map[string]string, l)
+				for k, v := range refCtx.Baggage {
+					sp.raw.Context.Baggage[k] = v
 				}
 			}
-			refMD.baggageLock.Unlock()
 			break ReferencesLoop
 		}
 	}
-	if sp.raw.TraceID == 0 {
+	if sp.raw.Context.TraceID == 0 {
 		// No parent Span found; allocate new trace and span ids and determine
 		// the Sampled status.
-		sp.raw.TraceID, sp.raw.SpanID = randomID2()
-		sp.raw.Sampled = t.options.shouldSample(sp.raw.TraceID)
-		sp.raw.Flags = flag.IsRoot
+		sp.raw.Context.TraceID, sp.raw.Context.SpanID = randomID2()
+		sp.raw.Context.Sampled = t.options.shouldSample(sp.raw.Context.TraceID)
+		sp.raw.Context.Flags = flag.IsRoot
 	}
 	if t.options.debugMode {
-		sp.raw.Flags |= flag.Debug
+		sp.raw.Context.Flags |= flag.Debug
 	}
 	return t.startSpanInternal(
 		sp,

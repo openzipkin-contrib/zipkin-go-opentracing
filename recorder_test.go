@@ -12,10 +12,10 @@ func TestInMemoryRecorderSpans(t *testing.T) {
 	recorder := NewInMemoryRecorder()
 	var apiRecorder SpanRecorder = recorder
 	span := RawSpan{
-		SpanContext: &SpanContext{},
-		Operation:   "test-span",
-		Start:       time.Now(),
-		Duration:    -1,
+		Context:   SpanContext{},
+		Operation: "test-span",
+		Start:     time.Now(),
+		Duration:  -1,
 	}
 	apiRecorder.RecordSpan(span)
 	assert.Equal(t, []RawSpan{span}, recorder.GetSpans())

@@ -173,6 +173,14 @@ func EnableSpanPool(val bool) TracerOption {
 	}
 }
 
+// NewSpanEventListener option
+func NewSpanEventListener(f func() func(SpanEvent)) TracerOption {
+	return func(opts *TracerOptions) error {
+		opts.newSpanEventListener = f
+		return nil
+	}
+}
+
 // NewTracer creates a new OpenTracing compatible Zipkin Tracer.
 func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Tracer, error) {
 	opts := &TracerOptions{

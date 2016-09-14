@@ -12,10 +12,10 @@ import (
 const defaultMaxAsyncQueueSize = 64
 
 // Default timeout for http request in seconds
-const defaultHttpTimeout = time.Second * 5
+const defaultHTTPTimeout = time.Second * 5
 
-// HttpCollector implements Collector by forwarding spans to a http server.
-type HttpCollector struct {
+// HTTPCollector implements Collector by forwarding spans to a http server.
+type HTTPCollector struct {
 	logger          Logger
 	url             string
 	client          *http.Client
@@ -23,35 +23,35 @@ type HttpCollector struct {
 	quit            chan struct{}
 }
 
-// HttpOption sets a parameter for the HttpCollector
-type HttpOption func(c *HttpCollector)
+// HTTPOption sets a parameter for the HttpCollector
+type HTTPOption func(c *HTTPCollector)
 
-// HttpLogger sets the logger used to report errors in the collection
+// HTTPLogger sets the logger used to report errors in the collection
 // process. By default, a no-op logger is used, i.e. no errors are logged
 // anywhere. It's important to set this option in a production service.
-func HttpLogger(logger Logger) HttpOption {
-	return func(c *HttpCollector) { c.logger = logger }
+func HTTPLogger(logger Logger) HTTPOption {
+	return func(c *HTTPCollector) { c.logger = logger }
 }
 
-// HttpMaxASyncQueueSize sets the maximum buffer size for the async queue.
-func HttpMaxAsyncQueueSize(size int) HttpOption {
-	return func(c *HttpCollector) { c.asyncInputQueue = make(chan *zipkincore.Span, size) }
+// HTTPMaxAsyncQueueSize sets the maximum buffer size for the async queue.
+func HTTPMaxAsyncQueueSize(size int) HTTPOption {
+	return func(c *HTTPCollector) { c.asyncInputQueue = make(chan *zipkincore.Span, size) }
 }
 
-// HttpTimeout sets maximum timeout for http request.
-func HttpTimeout(duration time.Duration) HttpOption {
-	return func(c *HttpCollector) { c.client.Timeout = duration }
+// HTTPTimeout sets maximum timeout for http request.
+func HTTPTimeout(duration time.Duration) HTTPOption {
+	return func(c *HTTPCollector) { c.client.Timeout = duration }
 }
 
-// NewHttpCollector returns a new Http-backend Collector. url should be a http
+// NewHTTPCollector returns a new HTTP-backend Collector. url should be a http
 // url for handle post request. timeout is passed to http client. queueSize control
 // the maximum size of buffer of async queue. The logger is used to log errors,
 // such as send failures;
-func NewHttpCollector(url string, options ...HttpOption) (Collector, error) {
-	c := &HttpCollector{
+func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
+	c := &HTTPCollector{
 		logger:          NewNopLogger(),
 		url:             url,
-		client:          &http.Client{Timeout: defaultHttpTimeout},
+		client:          &http.Client{Timeout: defaultHTTPTimeout},
 		asyncInputQueue: make(chan *zipkincore.Span, defaultMaxAsyncQueueSize),
 		quit:            make(chan struct{}, 1),
 	}
@@ -64,13 +64,13 @@ func NewHttpCollector(url string, options ...HttpOption) (Collector, error) {
 }
 
 // Collect implements Collector.
-func (c *HttpCollector) Collect(s *zipkincore.Span) error {
+func (c *HTTPCollector) Collect(s *zipkincore.Span) error {
 	c.asyncInputQueue <- s
 	return nil
 }
 
 // Close implements Collector.
-func (c *HttpCollector) Close() error {
+func (c *HTTPCollector) Close() error {
 	c.quit <- struct{}{}
 	return nil
 }
@@ -84,7 +84,7 @@ func httpSerialize(s *zipkincore.Span) []byte {
 	return t.Buffer.Bytes()
 }
 
-func (c *HttpCollector) loop() {
+func (c *HTTPCollector) loop() {
 	for {
 		select {
 		case span := <-c.asyncInputQueue:

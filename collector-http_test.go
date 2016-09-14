@@ -14,8 +14,8 @@ import (
 )
 
 func TestHttpCollector(t *testing.T) {
-	server := newHttpServer(t)
-	c, err := NewHttpCollector("http://localhost:10000/zipkin")
+	server := newHTTPServer(t)
+	c, err := NewHTTPCollector("http://localhost:10000/zipkin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func (s *httpServer) spans() []*zipkincore.Span {
 	return s.zipkinSpans
 }
 
-func newHttpServer(t *testing.T) *httpServer {
+func newHTTPServer(t *testing.T) *httpServer {
 	server := &httpServer{
 		t:           t,
 		zipkinSpans: make([]*zipkincore.Span, 0),

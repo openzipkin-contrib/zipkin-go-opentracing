@@ -4,6 +4,8 @@ import (
 	"github.com/apache/thrift/lib/go/thrift"
 	"net/http"
 
+	"encoding/base64"
+	"encoding/json"
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 	"strings"
 	"time"
@@ -75,23 +77,27 @@ func (c *HTTPCollector) Close() error {
 	return nil
 }
 
-func httpSerialize(s *zipkincore.Span) []byte {
+func httpSerialize(s *zipkincore.Span) string {
 	t := thrift.NewTMemoryBuffer()
 	p := thrift.NewTBinaryProtocolTransport(t)
 	if err := s.Write(p); err != nil {
 		panic(err)
 	}
-	return t.Buffer.Bytes()
+	return base64.StdEncoding.EncodeToString(t.Buffer.Bytes())
 }
 
 func (c *HTTPCollector) loop() {
 	for {
 		select {
 		case span := <-c.asyncInputQueue:
+			encode, err := json.Marshal([]string{httpSerialize(span)})
+			if err != nil {
+				_ = c.logger.Log("err", err.Error())
+			}
 			req, err := http.NewRequest(
 				"POST",
 				c.url,
-				strings.NewReader(string(httpSerialize(span))))
+				strings.NewReader(string(encode)))
 			if err != nil {
 				_ = c.logger.Log("err", err.Error())
 			}

@@ -9,8 +9,6 @@ import (
 
 	"github.com/apache/thrift/lib/go/thrift"
 
-	"encoding/base64"
-	"encoding/json"
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 	"sync"
 )
@@ -100,39 +98,22 @@ func newHTTPServer(t *testing.T) *httpServer {
 		if err != nil {
 			t.Fatal(err)
 		}
-
-		var encodeSpans []string
-		err = json.Unmarshal(body, &encodeSpans)
-		if err != nil {
+		buffer := thrift.NewTMemoryBuffer()
+		if _, err := buffer.Write(body); err != nil {
 			t.Error(err)
+			return
 		}
-
-		var spans []*zipkincore.Span
-		for _, encodeSpan := range encodeSpans {
-			buffer := thrift.NewTMemoryBuffer()
-			bytes, err := base64.StdEncoding.DecodeString(encodeSpan)
-			if err != nil {
-				t.Error(err)
-				return
-			}
-			if _, err := buffer.Write(bytes); err != nil {
-				t.Error(err)
-				return
-			}
-			transport := thrift.NewTBinaryProtocolTransport(buffer)
-			zs := &zipkincore.Span{}
-			if err := zs.Read(transport); err != nil {
-				t.Error(err)
-				return
-			}
-			spans = append(spans, zs)
+		transport := thrift.NewTBinaryProtocolTransport(buffer)
+		_, _, err = transport.ReadListBegin()
+		zs := &zipkincore.Span{}
+		if err := zs.Read(transport); err != nil {
+			t.Error(err)
+			return
 		}
-
+		err = transport.ReadListEnd()
 		server.mutex.Lock()
 		defer server.mutex.Unlock()
-		for _, span := range spans {
-			server.zipkinSpans = append(server.zipkinSpans, span)
-		}
+		server.zipkinSpans = append(server.zipkinSpans, zs)
 	})
 
 	go func() {

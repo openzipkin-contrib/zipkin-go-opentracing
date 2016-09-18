@@ -15,7 +15,7 @@ import (
 
 func TestHttpCollector(t *testing.T) {
 	server := newHTTPServer(t)
-	c, err := NewHTTPCollector("http://localhost:10000/zipkin")
+	c, err := NewHTTPCollector("http://localhost:10000/api/v1/spans")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,14 @@ func newHTTPServer(t *testing.T) *httpServer {
 		zipkinSpans: make([]*zipkincore.Span, 0),
 		mutex:       sync.RWMutex{},
 	}
-	http.HandleFunc("/zipkin", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/v1/spans", func(w http.ResponseWriter, r *http.Request) {
+		contextType := r.Header.Get("Content-Type")
+		if contextType != "application/x-thrift" {
+			t.Fatalf(
+				"except Content-Type should be application/x-thrift, but is %s",
+				contextType)
+		}
+
 		body, err := ioutil.ReadAll(r.Body)
 		if err != nil {
 			t.Fatal(err)
@@ -105,12 +112,20 @@ func newHTTPServer(t *testing.T) *httpServer {
 		}
 		transport := thrift.NewTBinaryProtocolTransport(buffer)
 		_, _, err = transport.ReadListBegin()
+		if err != nil {
+			t.Error(err)
+			return
+		}
 		zs := &zipkincore.Span{}
 		if err := zs.Read(transport); err != nil {
 			t.Error(err)
 			return
 		}
 		err = transport.ReadListEnd()
+		if err != nil {
+			t.Error(err)
+			return
+		}
 		server.mutex.Lock()
 		defer server.mutex.Unlock()
 		server.zipkinSpans = append(server.zipkinSpans, zs)

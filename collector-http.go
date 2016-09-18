@@ -100,6 +100,7 @@ func (c *HTTPCollector) loop() {
 				strings.NewReader(string(httpSerialize(span))))
 			if err != nil {
 				_ = c.logger.Log("err", err.Error())
+				continue
 			}
 			req.Header.Set("Content-Type", "application/x-thrift")
 

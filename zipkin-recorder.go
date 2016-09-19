@@ -117,10 +117,9 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 	}
 
 	for _, spLog := range sp.Logs {
-		if spLog.Timestamp.IsZero() {
-			spLog.Timestamp = time.Now()
-		}
-		annotate(span, spLog.Timestamp, spLog.Event, r.endpoint)
+		// XXX: decide how to represent spLog.Fields as an annotation
+		var annotationValue string
+		annotate(span, spLog.Timestamp, annotationValue, r.endpoint)
 	}
 	_ = r.collector.Collect(span)
 }

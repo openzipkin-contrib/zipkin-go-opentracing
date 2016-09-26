@@ -9,18 +9,24 @@ import (
 	"time"
 )
 
-const defaultMaxAsyncQueueSize = 64
-
 // Default timeout for http request in seconds
 const defaultHTTPTimeout = time.Second * 5
 
+// defaultBatchInterval in seconds
+const defaultHTTPBatchInterval = 1
+
 // HTTPCollector implements Collector by forwarding spans to a http server.
 type HTTPCollector struct {
-	logger          Logger
-	url             string
-	client          *http.Client
-	asyncInputQueue chan *zipkincore.Span
-	quit            chan struct{}
+	logger        Logger
+	url           string
+	client        *http.Client
+	nextSend      time.Time
+	batchInterval time.Duration
+	batchSize     int
+	batch         []*zipkincore.Span
+	spanc         chan *zipkincore.Span
+	sendc         chan struct{}
+	quit          chan struct{}
 }
 
 // HTTPOption sets a parameter for the HttpCollector
@@ -33,14 +39,21 @@ func HTTPLogger(logger Logger) HTTPOption {
 	return func(c *HTTPCollector) { c.logger = logger }
 }
 
-// HTTPMaxAsyncQueueSize sets the maximum buffer size for the async queue.
-func HTTPMaxAsyncQueueSize(size int) HTTPOption {
-	return func(c *HTTPCollector) { c.asyncInputQueue = make(chan *zipkincore.Span, size) }
-}
-
 // HTTPTimeout sets maximum timeout for http request.
 func HTTPTimeout(duration time.Duration) HTTPOption {
 	return func(c *HTTPCollector) { c.client.Timeout = duration }
+}
+
+// HTTPBatchSize sets the maximum batch size, after which a collect will be
+// triggered. The default batch size is 100 traces.
+func HTTPBatchSize(n int) HTTPOption {
+	return func(c *HTTPCollector) { c.batchSize = n }
+}
+
+// HTTPBatchInterval sets the maximum duration we will buffer traces before
+// emitting them to the collector. The default batch interval is 1 second.
+func HTTPBatchInterval(d time.Duration) HTTPOption {
+	return func(c *HTTPCollector) { c.batchInterval = d }
 }
 
 // NewHTTPCollector returns a new HTTP-backend Collector. url should be a http
@@ -49,23 +62,28 @@ func HTTPTimeout(duration time.Duration) HTTPOption {
 // such as send failures;
 func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 	c := &HTTPCollector{
-		logger:          NewNopLogger(),
-		url:             url,
-		client:          &http.Client{Timeout: defaultHTTPTimeout},
-		asyncInputQueue: make(chan *zipkincore.Span, defaultMaxAsyncQueueSize),
-		quit:            make(chan struct{}, 1),
+		logger:        NewNopLogger(),
+		url:           url,
+		client:        &http.Client{Timeout: defaultHTTPTimeout},
+		batchInterval: defaultHTTPBatchInterval * time.Second,
+		batchSize:     100,
+		batch:         []*zipkincore.Span{},
+		spanc:         make(chan *zipkincore.Span),
+		sendc:         make(chan struct{}),
+		quit:          make(chan struct{}, 1),
 	}
 
 	for _, option := range options {
 		option(c)
 	}
+	c.nextSend = time.Now().Add(c.batchInterval)
 	go c.loop()
 	return c, nil
 }
 
 // Collect implements Collector.
 func (c *HTTPCollector) Collect(s *zipkincore.Span) error {
-	c.asyncInputQueue <- s
+	c.spanc <- s
 	return nil
 }
 
@@ -75,14 +93,16 @@ func (c *HTTPCollector) Close() error {
 	return nil
 }
 
-func httpSerialize(s *zipkincore.Span) []byte {
+func httpSerialize(spans []*zipkincore.Span) []byte {
 	t := thrift.NewTMemoryBuffer()
 	p := thrift.NewTBinaryProtocolTransport(t)
-	if err := p.WriteListBegin(thrift.STRUCT, 1); err != nil {
+	if err := p.WriteListBegin(thrift.STRUCT, len(spans)); err != nil {
 		panic(err)
 	}
-	if err := s.Write(p); err != nil {
-		panic(err)
+	for _, s := range spans {
+		if err := s.Write(p); err != nil {
+			panic(err)
+		}
 	}
 	if err := p.WriteListEnd(); err != nil {
 		panic(err)
@@ -91,27 +111,46 @@ func httpSerialize(s *zipkincore.Span) []byte {
 }
 
 func (c *HTTPCollector) loop() {
+	tickc := time.Tick(c.batchInterval / 10)
+
 	for {
 		select {
-		case span := <-c.asyncInputQueue:
-			req, err := http.NewRequest(
-				"POST",
-				c.url,
-				strings.NewReader(string(httpSerialize(span))))
-			if err != nil {
-				_ = c.logger.Log("err", err.Error())
-				continue
+		case span := <-c.spanc:
+			c.batch = append(c.batch, span)
+			if len(c.batch) >= c.batchSize {
+				go c.sendNow()
 			}
-			req.Header.Set("Content-Type", "application/x-thrift")
-
-			go func() {
-				_, err := c.client.Do(req)
-				if err != nil {
-					_ = c.logger.Log("err", err.Error())
-				}
-			}()
+		case <-tickc:
+			if time.Now().After(c.nextSend) {
+				go c.sendNow()
+			}
+		case <-c.sendc:
+			c.nextSend = time.Now().Add(c.batchInterval)
+			if err := c.send(c.batch); err != nil {
+				_ = c.logger.Log("err", err.Error())
+			}
+			c.batch = c.batch[:0]
 		case <-c.quit:
 			return
 		}
 	}
+}
+
+func (c *HTTPCollector) send(spans []*zipkincore.Span) error {
+	req, err := http.NewRequest(
+		"POST",
+		c.url,
+		strings.NewReader(string(httpSerialize(spans))))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-thrift")
+
+	_, err = c.client.Do(req)
+
+	return err
+}
+
+func (c *HTTPCollector) sendNow() {
+	c.sendc <- struct{}{}
 }

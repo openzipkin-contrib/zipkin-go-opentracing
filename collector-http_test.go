@@ -39,7 +39,7 @@ func TestHttpCollector(t *testing.T) {
 	// yield again to the send operation to write to the socket. I think the
 	// best way to do that is just give it some time.
 
-	deadline := time.Now().Add(1 * time.Second)
+	deadline := time.Now().Add(2 * time.Second)
 	for {
 		if time.Now().After(deadline) {
 			t.Fatalf("never received a span")
@@ -111,15 +111,19 @@ func newHTTPServer(t *testing.T) *httpServer {
 			return
 		}
 		transport := thrift.NewTBinaryProtocolTransport(buffer)
-		_, _, err = transport.ReadListBegin()
+		_, size, err := transport.ReadListBegin()
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		zs := &zipkincore.Span{}
-		if err := zs.Read(transport); err != nil {
-			t.Error(err)
-			return
+		var spans []*zipkincore.Span
+		for i := 0; i < size; i++ {
+			zs := &zipkincore.Span{}
+			if err := zs.Read(transport); err != nil {
+				t.Error(err)
+				return
+			}
+			spans = append(spans, zs)
 		}
 		err = transport.ReadListEnd()
 		if err != nil {
@@ -128,11 +132,12 @@ func newHTTPServer(t *testing.T) *httpServer {
 		}
 		server.mutex.Lock()
 		defer server.mutex.Unlock()
-		server.zipkinSpans = append(server.zipkinSpans, zs)
+		server.zipkinSpans = append(server.zipkinSpans, spans...)
 	})
 
 	go func() {
 		http.ListenAndServe(":10000", nil)
 	}()
+
 	return server
 }

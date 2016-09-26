@@ -117,10 +117,11 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 	}
 
 	for _, spLog := range sp.Logs {
-		if spLog.Timestamp.IsZero() {
-			spLog.Timestamp = time.Now()
+		if logs, err := MaterializeWithJSON(spLog.Fields); err != nil {
+			fmt.Printf("JSON serialization of OpenTracing LogFields failed: %+v", err)
+		} else {
+			annotate(span, spLog.Timestamp, string(logs), r.endpoint)
 		}
-		annotate(span, spLog.Timestamp, spLog.Event, r.endpoint)
 	}
 	_ = r.collector.Collect(span)
 }

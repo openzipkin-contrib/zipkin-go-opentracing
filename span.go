@@ -6,6 +6,7 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+	"github.com/opentracing/opentracing-go/log"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
@@ -91,6 +92,31 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 	return s
 }
 
+func (s *spanImpl) LogKV(keyValues ...interface{}) {
+	fields, err := log.InterleavedKVToFields(keyValues...)
+	if err != nil {
+		s.LogFields(log.Error(err), log.String("function", "LogKV"))
+		return
+	}
+	s.LogFields(fields...)
+}
+
+func (s *spanImpl) LogFields(fields ...log.Field) {
+	lr := opentracing.LogRecord{
+		Fields: fields,
+	}
+	defer s.onLogFields(lr)
+	s.Lock()
+	defer s.Unlock()
+	if s.trim() || s.tracer.options.dropAllLogs {
+		return
+	}
+	if lr.Timestamp.IsZero() {
+		lr.Timestamp = time.Now()
+	}
+	s.raw.Logs = append(s.raw.Logs, lr)
+}
+
 func (s *spanImpl) LogEvent(event string) {
 	s.Log(opentracing.LogData{
 		Event: event,
@@ -116,7 +142,7 @@ func (s *spanImpl) Log(ld opentracing.LogData) {
 		ld.Timestamp = time.Now()
 	}
 
-	s.raw.Logs = append(s.raw.Logs, ld)
+	s.raw.Logs = append(s.raw.Logs, ld.ToLogRecord())
 }
 
 func (s *spanImpl) Finish() {
@@ -132,8 +158,11 @@ func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
 
 	s.Lock()
 	defer s.Unlock()
-	if opts.BulkLogData != nil {
-		s.raw.Logs = append(s.raw.Logs, opts.BulkLogData...)
+	if opts.LogRecords != nil {
+		s.raw.Logs = append(s.raw.Logs, opts.LogRecords...)
+	}
+	for _, ld := range opts.BulkLogData {
+		s.raw.Logs = append(s.raw.Logs, ld.ToLogRecord())
 	}
 	s.raw.Duration = duration
 

@@ -1,21 +1,21 @@
 package events
 
 import (
-	"github.com/opentracing/basictracer-go"
+	"github.com/openzipkin/zipkin-go-opentracing"
 	"golang.org/x/net/trace"
 )
 
-// NetTraceIntegrator can be passed into a basictracer as NewSpanEventListener
+// NetTraceIntegrator can be passed into a zipkintracer as NewSpanEventListener
 // and causes all traces to be registered with the net/trace endpoint.
-var NetTraceIntegrator = func() func(basictracer.SpanEvent) {
+var NetTraceIntegrator = func() func(zipkintracer.SpanEvent) {
 	var tr trace.Trace
-	return func(e basictracer.SpanEvent) {
+	return func(e zipkintracer.SpanEvent) {
 		switch t := e.(type) {
-		case basictracer.EventCreate:
+		case zipkintracer.EventCreate:
 			tr = trace.New("tracing", t.OperationName)
-		case basictracer.EventFinish:
+		case zipkintracer.EventFinish:
 			tr.Finish()
-		case basictracer.EventLog:
+		case zipkintracer.EventLog:
 			if t.Payload != nil {
 				tr.LazyPrintf("%s (payload %v)", t.Event, t.Payload)
 			} else {

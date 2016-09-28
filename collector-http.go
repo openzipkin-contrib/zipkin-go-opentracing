@@ -1,12 +1,13 @@
 package zipkintracer
 
 import (
-	"github.com/apache/thrift/lib/go/thrift"
-	"net/http"
-
 	"bytes"
-	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	"net/http"
 	"time"
+
+	"github.com/apache/thrift/lib/go/thrift"
+
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 // Default timeout for http request in seconds

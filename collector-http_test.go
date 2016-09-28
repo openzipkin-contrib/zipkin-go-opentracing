@@ -1,16 +1,15 @@
 package zipkintracer
 
 import (
-	"testing"
-	"time"
-
 	"io/ioutil"
 	"net/http"
+	"sync"
+	"testing"
+	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
-	"sync"
 )
 
 func TestHttpCollector(t *testing.T) {
@@ -106,7 +105,7 @@ func newHTTPServer(t *testing.T) *httpServer {
 			t.Fatal(err)
 		}
 		buffer := thrift.NewTMemoryBuffer()
-		if _, err := buffer.Write(body); err != nil {
+		if _, err = buffer.Write(body); err != nil {
 			t.Error(err)
 			return
 		}
@@ -119,7 +118,7 @@ func newHTTPServer(t *testing.T) *httpServer {
 		var spans []*zipkincore.Span
 		for i := 0; i < size; i++ {
 			zs := &zipkincore.Span{}
-			if err := zs.Read(transport); err != nil {
+			if err = zs.Read(transport); err != nil {
 				t.Error(err)
 				return
 			}

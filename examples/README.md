@@ -8,6 +8,10 @@ tracer.
 The code is a quick hack to solely demonstrate the usage of
 [OpenTracing](http://opentracing.io) with a [Zipkin](http://zipkin.io) backend.
 
+```
+note: the examples will only compile with Go 1.7 or higher
+```
+
 ## Usage:
 
 Build `svc1`, `svc2` and `cli` with `go build` and start both compiled services.

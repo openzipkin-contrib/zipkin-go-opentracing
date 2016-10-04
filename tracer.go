@@ -268,8 +268,9 @@ ReferencesLoop:
 			sp.raw.Context.Flags = refCtx.Flags
 			sp.raw.Context.Flags &^= flag.IsRoot // unset IsRoot flag if needed
 
-			if tags[string(ext.SpanKind)] == ext.SpanKindRPCServer &&
-				t.options.clientServerSameSpan {
+			if t.options.clientServerSameSpan &&
+				tags[string(ext.SpanKind)] == ext.SpanKindRPCServer.Value {
+
 				sp.raw.Context.SpanID = refCtx.SpanID
 				sp.raw.Context.ParentSpanID = refCtx.ParentSpanID
 			} else {

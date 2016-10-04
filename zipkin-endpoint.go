@@ -17,7 +17,7 @@ func makeEndpoint(hostport, serviceName string) *zipkincore.Endpoint {
 		return nil
 	}
 
-	portInt, err := strconv.ParseInt(port, 10, 16)
+	portInt, err := strconv.ParseUint(port, 10, 16)
 	if err != nil {
 		return nil
 	}

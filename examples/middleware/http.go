@@ -1,5 +1,7 @@
 // +build go1.7
 
+// Package middleware provides some usable transport middleware to deal with
+// propagating Zipkin traces across service boundaries.
 package middleware
 
 import (

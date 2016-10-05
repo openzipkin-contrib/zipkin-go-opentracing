@@ -14,7 +14,9 @@ note: the examples will only compile with Go 1.7 or higher
 
 ## Usage:
 
-Build `svc1`, `svc2` and `cli` with `go build` and start both compiled services.
+Build `svc1`, `svc2` and `cli` with `make` and start both compiled services
+found in the newly created `build` subdirectory.
+
 When you call the `cli` program it will trigger two calls to `svc1` of which one
 call will be proxied from `svc1` over to `svc2` to handle the method and by that
 generating a couple of spans across services.
@@ -29,5 +31,5 @@ The most interesting piece of code is found in `examples/middleware` which is
 kind of the missing link for people looking for a tracing framework. I advise
 you to seriously look into using [Go kit](https://gokit.io) and use its
 abstractions and OpenTracing middleware with which this Tracer is fully
-compatible instead of rolling your own. If you still want to roll your own you
+compatible, instead of rolling your own. If you still want to roll your own you
 can use `examples/middleware` as a starting point.

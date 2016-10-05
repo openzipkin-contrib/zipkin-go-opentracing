@@ -7,12 +7,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
-	"github.com/opentracing/opentracing-go"
-
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
-	"github.com/openzipkin/zipkin-go-opentracing/examples/svc1"
+	"github.com/openzipkin/zipkin-go-opentracing/examples/cli_with_2_services/svc1"
 )
 
 const (
@@ -20,7 +19,7 @@ const (
 	serviceName = "cli"
 
 	// Host + port of our service.
-	hostPort = "127.0.0.1:80"
+	hostPort = "127.0.0.1:0"
 
 	// Endpoint to send Zipkin spans to.
 	zipkinHTTPEndpoint = "http://localhost:9411/api/v1/spans"

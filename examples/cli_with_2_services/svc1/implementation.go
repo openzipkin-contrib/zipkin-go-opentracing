@@ -4,8 +4,9 @@ package svc1
 
 import (
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/openzipkin/zipkin-go-opentracing/examples/svc2"
 	"golang.org/x/net/context"
+
+	"github.com/openzipkin/zipkin-go-opentracing/examples/cli_with_2_services/svc2"
 )
 
 // svc1 is our actual service implementation

@@ -88,6 +88,12 @@ func (p *textMapPropagator) Extract(
 	err = carrier.ForeachKey(func(k, v string) error {
 		switch strings.ToLower(k) {
 		case zipkinTraceIDLower:
+			// TODO: add logic for most significant 64 bits when 128bit traceID's are
+			// supported.
+			// SEE: https://github.com/openzipkin/b3-propagation/issues/6
+			if len(v) > 16 {
+				v = v[len(v)-16:]
+			}
 			traceID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted

@@ -7,7 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/davecgh/go-spew/spew"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
@@ -69,8 +68,6 @@ func main() {
 
 	// Create Root Span for duration of the interaction with svc1
 	span := opentracing.StartSpan("Run")
-
-	spew.Dump(span)
 
 	// Put root span in context so it will be used in our calls to the client.
 	ctx := opentracing.ContextWithSpan(context.Background(), span)

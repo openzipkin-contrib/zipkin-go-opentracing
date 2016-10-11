@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
 
@@ -32,6 +33,9 @@ const (
 
 	// same span can be set to true for RPC style spans (Zipkin V1) vs Node style (OpenTracing)
 	sameSpan = true
+
+	// make Tracer generate 128 bit traceID's for root spans.
+	traceID128Bit = true
 )
 
 //ci
@@ -48,7 +52,9 @@ func main() {
 
 	// Create our tracer.
 	tracer, err := zipkin.NewTracer(
-		recorder, zipkin.ClientServerSameSpan(sameSpan),
+		recorder,
+		zipkin.ClientServerSameSpan(sameSpan),
+		zipkin.TraceID128Bit(traceID128Bit),
 	)
 	if err != nil {
 		fmt.Printf("unable to create Zipkin tracer: %+v", err)
@@ -63,6 +69,8 @@ func main() {
 
 	// Create Root Span for duration of the interaction with svc1
 	span := opentracing.StartSpan("Run")
+
+	spew.Dump(span)
 
 	// Put root span in context so it will be used in our calls to the client.
 	ctx := opentracing.ContextWithSpan(context.Background(), span)

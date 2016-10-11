@@ -93,6 +93,11 @@ type TracerOptions struct {
 	// reduces allocations. However, if you have any use-after-finish race
 	// conditions the code may panic.
 	enableSpanPool bool
+	// traceID128Bit enables the generation of 128 bit traceIDs in case the tracer
+	// needs to create a root span. By default regular 64 bit traceIDs are used.
+	// Regardless of this setting, the library will propagate and support both
+	// 64 and 128 bit incoming traces from upstream sources.
+	traceID128Bit bool
 }
 
 // TracerOption allows for functional options.
@@ -147,6 +152,14 @@ func DebugAssertUseAfterFinish(val bool) TracerOption {
 	}
 }
 
+// TraceID128Bit option
+func TraceID128Bit(val bool) TracerOption {
+	return func(opts *TracerOptions) error {
+		opts.traceID128Bit = val
+		return nil
+	}
+}
+
 // ClientServerSameSpan allows to place client-side and server-side annotations
 // for a RPC call in the same span (Zipkin V1 behavior). By default this Tracer
 // uses single host spans (so client-side and server-side in separate spans).
@@ -193,6 +206,7 @@ func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Trac
 		debugAssertUseAfterFinish:  false,
 		clientServerSameSpan:       false,
 		debugMode:                  false,
+		traceID128Bit:              false,
 	}
 	for _, o := range options {
 		err := o(opts)
@@ -287,11 +301,14 @@ ReferencesLoop:
 			break ReferencesLoop
 		}
 	}
-	if sp.raw.Context.TraceID == 0 {
+	if sp.raw.Context.TraceID.Empty() {
 		// No parent Span found; allocate new trace and span ids and determine
 		// the Sampled status.
-		sp.raw.Context.TraceID, sp.raw.Context.SpanID = randomID2()
-		sp.raw.Context.Sampled = t.options.shouldSample(sp.raw.Context.TraceID)
+		if t.options.traceID128Bit {
+			sp.raw.Context.TraceID.High = randomID()
+		}
+		sp.raw.Context.TraceID.Low, sp.raw.Context.SpanID = randomID2()
+		sp.raw.Context.Sampled = t.options.shouldSample(sp.raw.Context.TraceID.Low)
 		sp.raw.Context.Flags = flag.IsRoot
 	}
 	if t.options.debugMode {

@@ -56,15 +56,20 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 	if duration == 0 {
 		duration = 1
 	}
-
+	var traceIDHigh *int64
+	if sp.Context.TraceID.High > 0 {
+		tidh := int64(sp.Context.TraceID.High)
+		traceIDHigh = &tidh
+	}
 	span := &zipkincore.Span{
-		Name:      sp.Operation,
-		ID:        int64(sp.Context.SpanID),
-		TraceID:   int64(sp.Context.TraceID),
-		ParentID:  parentSpanID,
-		Debug:     r.debug || (sp.Context.Flags&flag.Debug == flag.Debug),
-		Timestamp: &timestamp,
-		Duration:  &duration,
+		Name:        sp.Operation,
+		ID:          int64(sp.Context.SpanID),
+		TraceID:     int64(sp.Context.TraceID.Low),
+		TraceIDHigh: traceIDHigh,
+		ParentID:    parentSpanID,
+		Debug:       r.debug || (sp.Context.Flags&flag.Debug == flag.Debug),
+		Timestamp:   &timestamp,
+		Duration:    &duration,
 	}
 	if kind, ok := sp.Tags[string(otext.SpanKind)]; ok {
 		switch kind {

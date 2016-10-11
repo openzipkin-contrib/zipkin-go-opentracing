@@ -12,6 +12,7 @@ import (
 
 	zipkintracer "github.com/openzipkin/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
+	"github.com/openzipkin/zipkin-go-opentracing/types"
 )
 
 type verbatimCarrier struct {
@@ -31,7 +32,7 @@ func (vc *verbatimCarrier) GetBaggage(f func(string, string)) {
 	}
 }
 
-func (vc *verbatimCarrier) SetState(tID, sID uint64, pID *uint64, sampled bool, flags flag.Flags) {
+func (vc *verbatimCarrier) SetState(tID types.TraceID, sID uint64, pID *uint64, sampled bool, flags flag.Flags) {
 	vc.SpanContext = zipkintracer.SpanContext{
 		TraceID:      tID,
 		SpanID:       sID,
@@ -41,7 +42,7 @@ func (vc *verbatimCarrier) SetState(tID, sID uint64, pID *uint64, sampled bool, 
 	}
 }
 
-func (vc *verbatimCarrier) State() (traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags) {
+func (vc *verbatimCarrier) State() (traceID types.TraceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags) {
 	return vc.SpanContext.TraceID, vc.SpanContext.SpanID, vc.SpanContext.ParentSpanID, vc.SpanContext.Sampled, vc.SpanContext.Flags
 }
 
@@ -52,6 +53,7 @@ func TestSpanPropagator(t *testing.T) {
 		recorder,
 		zipkintracer.ClientServerSameSpan(true),
 		zipkintracer.DebugMode(true),
+		zipkintracer.TraceID128Bit(true),
 	)
 	if err != nil {
 		t.Fatalf("Unable to create Tracer: %+v", err)
@@ -59,7 +61,6 @@ func TestSpanPropagator(t *testing.T) {
 
 	sp := tracer.StartSpan(op)
 	sp.SetBaggageItem("foo", "bar")
-
 	tmc := opentracing.HTTPHeadersCarrier(http.Header{})
 	tests := []struct {
 		typ, carrier interface{}

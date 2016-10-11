@@ -1,11 +1,14 @@
 package zipkintracer
 
-import "github.com/openzipkin/zipkin-go-opentracing/flag"
+import (
+	"github.com/openzipkin/zipkin-go-opentracing/flag"
+	"github.com/openzipkin/zipkin-go-opentracing/types"
+)
 
 // SpanContext holds the basic Span metadata.
 type SpanContext struct {
 	// A probabilistically unique identifier for a [multi-span] trace.
-	TraceID uint64
+	TraceID types.TraceID
 
 	// A probabilistically unique identifier for a span.
 	SpanID uint64

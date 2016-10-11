@@ -5,13 +5,15 @@ import (
 
 	"github.com/openzipkin/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
+	"github.com/openzipkin/zipkin-go-opentracing/types"
 	"github.com/openzipkin/zipkin-go-opentracing/wire"
 )
 
 func TestProtobufCarrier(t *testing.T) {
 	var carrier zipkintracer.DelegatingCarrier = &wire.ProtobufCarrier{}
 
-	var traceID, spanID, parentSpanID uint64 = 1, 2, 0
+	traceID := types.TraceID{High: 1, Low: 2}
+	var spanID, parentSpanID uint64 = 3, 0
 	sampled := true
 	flags := flag.Debug | flag.Sampled | flag.SamplingSet
 	baggageKey, expVal := "key1", "val1"

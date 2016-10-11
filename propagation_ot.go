@@ -10,6 +10,7 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
+	"github.com/openzipkin/zipkin-go-opentracing/types"
 	"github.com/openzipkin/zipkin-go-opentracing/wire"
 )
 
@@ -50,7 +51,7 @@ func (p *textMapPropagator) Inject(
 	if !ok {
 		return opentracing.ErrInvalidCarrier
 	}
-	carrier.Set(zipkinTraceID, strconv.FormatUint(sc.TraceID, 16))
+	carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
 	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.SpanID, 16))
 	carrier.Set(zipkinSampled, strconv.FormatBool(sc.Sampled))
 
@@ -77,7 +78,7 @@ func (p *textMapPropagator) Extract(
 	}
 	requiredFieldCount := 0
 	var (
-		traceID      uint64
+		traceID      types.TraceID
 		spanID       uint64
 		sampled      bool
 		parentSpanID *uint64
@@ -88,13 +89,7 @@ func (p *textMapPropagator) Extract(
 	err = carrier.ForeachKey(func(k, v string) error {
 		switch strings.ToLower(k) {
 		case zipkinTraceIDLower:
-			// TODO: add logic for most significant 64 bits when 128bit traceID's are
-			// supported.
-			// SEE: https://github.com/openzipkin/b3-propagation/issues/6
-			if len(v) > 16 {
-				v = v[len(v)-16:]
-			}
-			traceID, err = strconv.ParseUint(v, 16, 64)
+			traceID, err = types.TraceIDFromHex(v)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
@@ -176,7 +171,8 @@ func (p *binaryPropagator) Inject(
 	}
 
 	state := wire.TracerState{}
-	state.TraceId = sc.TraceID
+	state.TraceId = sc.TraceID.Low
+	state.TraceIdHigh = sc.TraceID.High
 	state.SpanId = sc.SpanID
 	state.Sampled = sc.Sampled
 	state.BaggageItems = sc.Baggage
@@ -252,7 +248,7 @@ func (p *binaryPropagator) Extract(
 	flags |= flag.SamplingSet
 
 	return SpanContext{
-		TraceID:      ctx.TraceId,
+		TraceID:      types.TraceID{Low: ctx.TraceId, High: ctx.TraceIdHigh},
 		SpanID:       ctx.SpanId,
 		Sampled:      ctx.Sampled,
 		Baggage:      ctx.BaggageItems,

@@ -85,6 +85,7 @@ func BenchmarkTrimmedSpan_100Events_100Tags_100BaggageItems(b *testing.B) {
 		&r,
 		TrimUnsampledSpans(true),
 		WithSampler(neverSample),
+		TraceID128Bit(true),
 	)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)

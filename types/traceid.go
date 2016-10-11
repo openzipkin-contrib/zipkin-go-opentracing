@@ -17,8 +17,10 @@ func TraceIDFromHex(h string) (t TraceID, err error) {
 		if t.High, err = strconv.ParseUint(h[0:len(h)-16], 16, 64); err != nil {
 			return
 		}
+		t.Low, err = strconv.ParseUint(h[len(h)-16:], 16, 64)
+		return
 	}
-	t.Low, err = strconv.ParseUint(h[len(h)-16:], 16, 64)
+	t.Low, err = strconv.ParseUint(h, 16, 64)
 	return
 }
 

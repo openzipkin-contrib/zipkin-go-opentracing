@@ -12,6 +12,8 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
+
+	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 
 // RequestFunc is a middleware function for outgoing HTTP requests.
@@ -30,7 +32,12 @@ func ToHTTPRequest(tracer opentracing.Tracer) RequestFunc {
 
 			// Add some standard OpenTracing tags, useful in an HTTP request.
 			ext.HTTPMethod.Set(span, req.Method)
-			ext.HTTPUrl.Set(span, req.URL.RequestURI())
+			span.SetTag(zipkincore.HTTP_HOST, req.URL.Host)
+			span.SetTag(zipkincore.HTTP_PATH, req.URL.Path)
+			ext.HTTPUrl.Set(
+				span,
+				fmt.Sprintf("%s://%s%s", req.URL.Scheme, req.URL.Host, req.URL.Path),
+			)
 
 			// Add information on the peer service we're about to contact.
 			if host, portString, err := net.SplitHostPort(req.URL.Host); err == nil {

@@ -2,7 +2,9 @@ package zipkintracer
 
 import (
 	opentracing "github.com/opentracing/opentracing-go"
+
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
+	"github.com/openzipkin/zipkin-go-opentracing/types"
 )
 
 type accessorPropagator struct {
@@ -13,8 +15,8 @@ type accessorPropagator struct {
 // by types which have a means of storing the trace metadata and already know
 // how to serialize themselves (for example, protocol buffers).
 type DelegatingCarrier interface {
-	SetState(traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags)
-	State() (traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags)
+	SetState(traceID types.TraceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags)
+	State() (traceID types.TraceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags)
 	SetBaggageItem(key, value string)
 	GetBaggage(func(key, value string))
 }

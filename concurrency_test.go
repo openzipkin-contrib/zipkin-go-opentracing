@@ -14,6 +14,7 @@ func TestDebugAssertSingleGoroutine(t *testing.T) {
 		NewInMemoryRecorder(),
 		EnableSpanPool(true),
 		DebugAssertSingleGoroutine(true),
+		TraceID128Bit(true),
 	)
 	if err != nil {
 		t.Fatalf("Unable to create Tracer: %+v", err)
@@ -42,6 +43,7 @@ func TestDebugAssertUseAfterFinish(t *testing.T) {
 		NewInMemoryRecorder(),
 		EnableSpanPool(true),
 		DebugAssertUseAfterFinish(true),
+		TraceID128Bit(true),
 	)
 	if err != nil {
 		t.Fatalf("Unable to create Tracer: %+v", err)
@@ -78,6 +80,7 @@ func TestConcurrentUsage(t *testing.T) {
 		&cr,
 		EnableSpanPool(true),
 		DebugAssertSingleGoroutine(true),
+		TraceID128Bit(true),
 	)
 	if err != nil {
 		t.Fatalf("Unable to create Tracer: %+v", err)

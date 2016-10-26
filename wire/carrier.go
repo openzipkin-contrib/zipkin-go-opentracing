@@ -1,6 +1,9 @@
 package wire
 
-import "github.com/openzipkin/zipkin-go-opentracing/flag"
+import (
+	"github.com/openzipkin/zipkin-go-opentracing/flag"
+	"github.com/openzipkin/zipkin-go-opentracing/types"
+)
 
 // ProtobufCarrier is a DelegatingCarrier that uses protocol buffers as the
 // the underlying datastructure. The reason for implementing DelagatingCarrier
@@ -9,8 +12,9 @@ import "github.com/openzipkin/zipkin-go-opentracing/flag"
 type ProtobufCarrier TracerState
 
 // SetState set's the tracer state.
-func (p *ProtobufCarrier) SetState(traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags) {
-	p.TraceId = traceID
+func (p *ProtobufCarrier) SetState(traceID types.TraceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags) {
+	p.TraceId = traceID.Low
+	p.TraceIdHigh = traceID.High
 	p.SpanId = spanID
 	if parentSpanID == nil {
 		flags |= flag.IsRoot
@@ -30,8 +34,9 @@ func (p *ProtobufCarrier) SetState(traceID, spanID uint64, parentSpanID *uint64,
 }
 
 // State returns the tracer state.
-func (p *ProtobufCarrier) State() (traceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags) {
-	traceID = p.TraceId
+func (p *ProtobufCarrier) State() (traceID types.TraceID, spanID uint64, parentSpanID *uint64, sampled bool, flags flag.Flags) {
+	traceID.Low = p.TraceId
+	traceID.High = p.TraceIdHigh
 	spanID = p.SpanId
 	sampled = p.Sampled
 	flags = flag.Flags(p.Flags)

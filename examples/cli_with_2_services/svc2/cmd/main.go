@@ -28,6 +28,9 @@ const (
 
 	// same span can be set to true for RPC style spans (Zipkin V1) vs Node style (OpenTracing)
 	sameSpan = true
+
+	// make Tracer generate 128 bit traceID's for root spans.
+	traceID128Bit = true
 )
 
 //svc2
@@ -44,7 +47,9 @@ func main() {
 
 	// create tracer.
 	tracer, err := zipkin.NewTracer(
-		recorder, zipkin.ClientServerSameSpan(sameSpan),
+		recorder,
+		zipkin.ClientServerSameSpan(sameSpan),
+		zipkin.TraceID128Bit(traceID128Bit),
 	)
 	if err != nil {
 		fmt.Printf("unable to create Zipkin tracer: %+v", err)

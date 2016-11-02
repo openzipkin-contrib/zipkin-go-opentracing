@@ -41,26 +41,19 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 	if !sp.Context.Sampled {
 		return
 	}
-	var (
-		parentSpanID *int64
-		timestamp    = sp.Start.UnixNano() / 1e3
-		duration     = sp.Duration.Nanoseconds() / 1e3
-	)
+
+	var parentSpanID *int64
 	if sp.Context.ParentSpanID != nil {
 		id := int64(*sp.Context.ParentSpanID)
 		parentSpanID = &id
 	}
 
-	// since we always time our spans we will round up to 1 microsecond if the
-	// span took less.
-	if duration == 0 {
-		duration = 1
-	}
 	var traceIDHigh *int64
 	if sp.Context.TraceID.High > 0 {
 		tidh := int64(sp.Context.TraceID.High)
 		traceIDHigh = &tidh
 	}
+
 	span := &zipkincore.Span{
 		Name:        sp.Operation,
 		ID:          int64(sp.Context.SpanID),
@@ -68,8 +61,18 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 		TraceIDHigh: traceIDHigh,
 		ParentID:    parentSpanID,
 		Debug:       r.debug || (sp.Context.Flags&flag.Debug == flag.Debug),
-		Timestamp:   &timestamp,
-		Duration:    &duration,
+	}
+	// only send timestamp and duration if this process owns the current span.
+	if sp.Context.Owner {
+		timestamp := sp.Start.UnixNano() / 1e3
+		duration := sp.Duration.Nanoseconds() / 1e3
+		// since we always time our spans we will round up to 1 microsecond if the
+		// span took less.
+		if duration == 0 {
+			duration = 1
+		}
+		span.Timestamp = &timestamp
+		span.Duration = &duration
 	}
 	if kind, ok := sp.Tags[string(otext.SpanKind)]; ok {
 		switch kind {

@@ -24,6 +24,9 @@ type SpanContext struct {
 
 	// Flags provides the ability to create and communicate feature flags.
 	Flags flag.Flags
+
+	// Whether the span is owned by the current process
+	Owner bool
 }
 
 // ForeachBaggageItem belongs to the opentracing.SpanContext interface
@@ -54,5 +57,5 @@ func (c SpanContext) WithBaggageItem(key, val string) SpanContext {
 		*parentSpanID = *c.ParentSpanID
 	}
 	// Use positional parameters so the compiler will help catch new fields.
-	return SpanContext{c.TraceID, c.SpanID, c.Sampled, newBaggage, parentSpanID, c.Flags}
+	return SpanContext{c.TraceID, c.SpanID, c.Sampled, newBaggage, parentSpanID, c.Flags, c.Owner}
 }

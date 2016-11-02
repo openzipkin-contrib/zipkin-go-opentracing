@@ -272,9 +272,7 @@ func (t *tracerImpl) startSpanWithOptions(
 ReferencesLoop:
 	for _, ref := range opts.References {
 		switch ref.Type {
-		case opentracing.ChildOfRef,
-			opentracing.FollowsFromRef:
-
+		case opentracing.ChildOfRef:
 			refCtx := ref.ReferencedContext.(SpanContext)
 			sp.raw.Context.TraceID = refCtx.TraceID
 			sp.raw.Context.ParentSpanID = &refCtx.SpanID
@@ -284,13 +282,33 @@ ReferencesLoop:
 
 			if t.options.clientServerSameSpan &&
 				tags[string(ext.SpanKind)] == ext.SpanKindRPCServer.Value {
-
 				sp.raw.Context.SpanID = refCtx.SpanID
 				sp.raw.Context.ParentSpanID = refCtx.ParentSpanID
+				sp.raw.Context.Owner = false
 			} else {
 				sp.raw.Context.SpanID = randomID()
 				sp.raw.Context.ParentSpanID = &refCtx.SpanID
+				sp.raw.Context.Owner = true
 			}
+
+			if l := len(refCtx.Baggage); l > 0 {
+				sp.raw.Context.Baggage = make(map[string]string, l)
+				for k, v := range refCtx.Baggage {
+					sp.raw.Context.Baggage[k] = v
+				}
+			}
+			break ReferencesLoop
+		case opentracing.FollowsFromRef:
+			refCtx := ref.ReferencedContext.(SpanContext)
+			sp.raw.Context.TraceID = refCtx.TraceID
+			sp.raw.Context.ParentSpanID = &refCtx.SpanID
+			sp.raw.Context.Sampled = refCtx.Sampled
+			sp.raw.Context.Flags = refCtx.Flags
+			sp.raw.Context.Flags &^= flag.IsRoot // unset IsRoot flag if needed
+
+			sp.raw.Context.SpanID = randomID()
+			sp.raw.Context.ParentSpanID = &refCtx.SpanID
+			sp.raw.Context.Owner = true
 
 			if l := len(refCtx.Baggage); l > 0 {
 				sp.raw.Context.Baggage = make(map[string]string, l)
@@ -310,6 +328,7 @@ ReferencesLoop:
 		sp.raw.Context.TraceID.Low, sp.raw.Context.SpanID = randomID2()
 		sp.raw.Context.Sampled = t.options.shouldSample(sp.raw.Context.TraceID.Low)
 		sp.raw.Context.Flags = flag.IsRoot
+		sp.raw.Context.Owner = true
 	}
 	if t.options.debugMode {
 		sp.raw.Context.Flags |= flag.Debug

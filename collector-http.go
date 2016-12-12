@@ -122,7 +122,7 @@ func (c *HTTPCollector) loop() {
 				go c.sendNow()
 			}
 		case <-tickc:
-			if time.Now().After(c.nextSend) {
+			if time.Now().After(c.nextSend) && len(c.batch) > 0 {
 				go c.sendNow()
 			}
 		case <-c.sendc:

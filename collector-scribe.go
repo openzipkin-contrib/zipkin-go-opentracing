@@ -31,6 +31,7 @@ type ScribeCollector struct {
 	logger        Logger
 	category      string
 	quit          chan struct{}
+	shutdown      chan error
 }
 
 // NewScribeCollector returns a new Scribe-backed Collector. addr should be a
@@ -56,6 +57,7 @@ func NewScribeCollector(addr string, timeout time.Duration, options ...ScribeOpt
 		logger:        NewNopLogger(),
 		category:      defaultScribeCategory,
 		quit:          make(chan struct{}),
+		shutdown:      make(chan error, 1),
 	}
 	for _, option := range options {
 		option(c)
@@ -74,13 +76,14 @@ func (c *ScribeCollector) Collect(s *zipkincore.Span) error {
 // Close implements Collector.
 func (c *ScribeCollector) Close() error {
 	close(c.quit)
-	return nil
+	return <-c.shutdown
 }
 
 func (c *ScribeCollector) loop() {
 	tickc := time.Tick(c.batchInterval / 10)
 
 	for {
+		var err error
 		select {
 		case span := <-c.spanc:
 			c.batch = append(c.batch, &scribe.LogEntry{
@@ -98,11 +101,17 @@ func (c *ScribeCollector) loop() {
 
 		case <-c.sendc:
 			c.nextSend = time.Now().Add(c.batchInterval)
-			if err := c.send(c.batch); err != nil {
+			if err = c.send(c.batch); err != nil {
 				_ = c.logger.Log("err", err.Error())
 			}
 			c.batch = c.batch[:0]
 		case <-c.quit:
+			if len(c.batch) > 0 {
+				if err = c.send(c.batch); err != nil {
+					_ = c.logger.Log("err", err.Error())
+				}
+			}
+			c.shutdown <- err
 			return
 		}
 	}

@@ -28,6 +28,7 @@ type HTTPCollector struct {
 	spanc         chan *zipkincore.Span
 	sendc         chan struct{}
 	quit          chan struct{}
+	shutdown      chan error
 }
 
 // HTTPOption sets a parameter for the HttpCollector
@@ -72,6 +73,7 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 		spanc:         make(chan *zipkincore.Span),
 		sendc:         make(chan struct{}),
 		quit:          make(chan struct{}, 1),
+		shutdown:      make(chan error, 1),
 	}
 
 	for _, option := range options {
@@ -91,7 +93,7 @@ func (c *HTTPCollector) Collect(s *zipkincore.Span) error {
 // Close implements Collector.
 func (c *HTTPCollector) Close() error {
 	c.quit <- struct{}{}
-	return nil
+	return <-c.shutdown
 }
 
 func httpSerialize(spans []*zipkincore.Span) *bytes.Buffer {
@@ -113,8 +115,8 @@ func httpSerialize(spans []*zipkincore.Span) *bytes.Buffer {
 
 func (c *HTTPCollector) loop() {
 	tickc := time.Tick(c.batchInterval / 10)
-
 	for {
+		var err error
 		select {
 		case span := <-c.spanc:
 			c.batch = append(c.batch, span)
@@ -127,11 +129,17 @@ func (c *HTTPCollector) loop() {
 			}
 		case <-c.sendc:
 			c.nextSend = time.Now().Add(c.batchInterval)
-			if err := c.send(c.batch); err != nil {
+			if err = c.send(c.batch); err != nil {
 				_ = c.logger.Log("err", err.Error())
 			}
 			c.batch = c.batch[:0]
 		case <-c.quit:
+			if len(c.batch) > 0 {
+				if err = c.send(c.batch); err != nil {
+					_ = c.logger.Log("err", err.Error())
+				}
+			}
+			c.shutdown <- err
 			return
 		}
 	}

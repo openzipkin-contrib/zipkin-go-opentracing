@@ -60,7 +60,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	// explicitely set our tracer to be the default tracer.
+	// explicitly set our tracer to be the default tracer.
 	opentracing.InitGlobalTracer(tracer)
 
 	// create the client to svc2

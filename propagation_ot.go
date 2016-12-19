@@ -22,21 +22,15 @@ type binaryPropagator struct {
 }
 
 const (
-	prefixBaggage = "ot-baggage-"
+	prefixTracerState = "x-b3-" // we default to interop with non-opentracing zipkin tracers
+	prefixBaggage     = "ot-baggage-"
 
 	tracerStateFieldCount = 3 // not 5, X-B3-ParentSpanId is optional and we allow optional Sampled header
-
-	zipkinTraceID      = "X-B3-TraceId"
-	zipkinSpanID       = "X-B3-SpanId"
-	zipkinParentSpanID = "X-B3-ParentSpanId"
-	zipkinSampled      = "X-B3-Sampled"
-	zipkinFlags        = "X-B3-Flags"
-
-	zipkinTraceIDLower      = "x-b3-traceid"
-	zipkinSpanIDLower       = "x-b3-spanid"
-	zipkinParentSpanIDLower = "x-b3-parentspanid"
-	zipkinSampledLower      = "x-b3-sampled"
-	zipkinFlagsLower        = "x-b3-flags"
+	zipkinTraceID         = prefixTracerState + "traceid"
+	zipkinSpanID          = prefixTracerState + "spanid"
+	zipkinParentSpanID    = prefixTracerState + "parentspanid"
+	zipkinSampled         = prefixTracerState + "sampled"
+	zipkinFlags           = prefixTracerState + "flags"
 )
 
 func (p *textMapPropagator) Inject(
@@ -88,31 +82,31 @@ func (p *textMapPropagator) Extract(
 	decodedBaggage := make(map[string]string)
 	err = carrier.ForeachKey(func(k, v string) error {
 		switch strings.ToLower(k) {
-		case zipkinTraceIDLower:
+		case zipkinTraceID:
 			traceID, err = types.TraceIDFromHex(v)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
-		case zipkinSpanIDLower:
+		case zipkinSpanID:
 			spanID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
-		case zipkinParentSpanIDLower:
+		case zipkinParentSpanID:
 			var id uint64
 			id, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
 			parentSpanID = &id
-		case zipkinSampledLower:
+		case zipkinSampled:
 			sampled, err = strconv.ParseBool(v)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
 			// Sampled header was explicitly set
 			flags |= flag.SamplingSet
-		case zipkinFlagsLower:
+		case zipkinFlags:
 			var f uint64
 			f, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	otext "github.com/opentracing/opentracing-go/ext"
+	"github.com/opentracing/opentracing-go/log"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
@@ -21,18 +22,48 @@ var (
 
 // Recorder implements the SpanRecorder interface.
 type Recorder struct {
-	collector Collector
-	debug     bool
-	endpoint  *zipkincore.Endpoint
+	collector    Collector
+	debug        bool
+	endpoint     *zipkincore.Endpoint
+	materializer func(logFields []log.Field) ([]byte, error)
+}
+
+// RecorderOption allows for functional options.
+type RecorderOption func(r *Recorder)
+
+// WithLogFmtMaterializer will convert OpenTracing Log fields to a LogFmt representation.
+func WithLogFmtMaterializer() RecorderOption {
+	return func(r *Recorder) {
+		r.materializer = MaterializeWithLogFmt
+	}
+}
+
+// WithJSONMaterializer will convert OpenTracing Log fields to a JSON representation.
+func WithJSONMaterializer() RecorderOption {
+	return func(r *Recorder) {
+		r.materializer = MaterializeWithJSON
+	}
+}
+
+// WithStrictMaterializer will only record event Log fields and discard the rest.
+func WithStrictMaterializer() RecorderOption {
+	return func(r *Recorder) {
+		r.materializer = StrictZipkinMaterializer
+	}
 }
 
 // NewRecorder creates a new Zipkin Recorder backed by the provided Collector.
-func NewRecorder(c Collector, debug bool, hostPort, serviceName string) SpanRecorder {
-	return &Recorder{
-		collector: c,
-		debug:     debug,
-		endpoint:  makeEndpoint(hostPort, serviceName),
+func NewRecorder(c Collector, debug bool, hostPort, serviceName string, options ...RecorderOption) SpanRecorder {
+	r := &Recorder{
+		collector:    c,
+		debug:        debug,
+		endpoint:     makeEndpoint(hostPort, serviceName),
+		materializer: MaterializeWithLogFmt,
 	}
+	for _, opts := range options {
+		opts(r)
+	}
+	return r
 }
 
 // RecordSpan converts a RawSpan into the Zipkin representation of a span
@@ -125,8 +156,15 @@ func (r *Recorder) RecordSpan(sp RawSpan) {
 	}
 
 	for _, spLog := range sp.Logs {
-		if logs, err := MaterializeWithJSON(spLog.Fields); err != nil {
-			fmt.Printf("JSON serialization of OpenTracing LogFields failed: %+v", err)
+		if len(spLog.Fields) == 1 && spLog.Fields[0].Key() == "event" {
+			// proper Zipkin annotation
+			annotate(span, spLog.Timestamp, fmt.Sprintf("%+v", spLog.Fields[0].Value()), r.endpoint)
+			continue
+		}
+		// OpenTracing Log with key-value pair(s). Try to materialize using the
+		// materializer chosen for the recorder.
+		if logs, err := r.materializer(spLog.Fields); err != nil {
+			fmt.Printf("Materialization of OpenTracing LogFields failed: %+v", err)
 		} else {
 			annotate(span, spLog.Timestamp, string(logs), r.endpoint)
 		}

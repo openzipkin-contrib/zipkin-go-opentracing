@@ -24,7 +24,7 @@ type EventLogFields opentracing.LogRecord
 
 // EventLog is received when Log (or one of its derivatives) is called.
 //
-// Deprecated: superseded by EventLogFields
+// DEPRECATED
 type EventLog opentracing.LogData
 
 // EventFinish is received when Finish is called.

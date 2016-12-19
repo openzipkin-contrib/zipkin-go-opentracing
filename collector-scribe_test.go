@@ -39,21 +39,11 @@ func TestScribeCollector(t *testing.T) {
 	if err := c.Collect(span); err != nil {
 		t.Errorf("error during collection: %v", err)
 	}
-
-	// Need to yield to the select loop to accept the send request, and then
-	// yield again to the send operation to write to the socket. I think the
-	// best way to do that is just give it some time.
-
-	deadline := time.Now().Add(1 * time.Second)
-	for {
-		if time.Now().After(deadline) {
-			t.Fatalf("never received a span")
-		}
-		if want, have := 1, len(server.spans()); want != have {
-			time.Sleep(time.Millisecond)
-			continue
-		}
-		break
+	if err := c.Close(); err != nil {
+		t.Fatalf("error during collection: %v", err)
+	}
+	if want, have := 1, len(server.spans()); want != have {
+		t.Fatalf("never received a span")
 	}
 
 	gotSpan := server.spans()[0]

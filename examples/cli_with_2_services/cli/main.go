@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/opentracing/opentracing-go"
 	"golang.org/x/net/context"
@@ -60,7 +59,7 @@ func main() {
 		os.Exit(-1)
 	}
 
-	// Explicitely set our tracer to be the default tracer.
+	// Explicitly set our tracer to be the default tracer.
 	opentracing.InitGlobalTracer(tracer)
 
 	// Create Client to svc1 Service
@@ -85,6 +84,6 @@ func main() {
 	// Finish our CLI span
 	span.Finish()
 
-	// Wait some time for the spans to be sent to the collector before exiting
-	time.Sleep(2 * time.Second)
+	// Close collector to ensure spans are sent before exiting.
+	collector.Close()
 }

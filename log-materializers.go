@@ -22,11 +22,16 @@
 package zipkintracer
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 
+	"github.com/go-logfmt/logfmt"
 	"github.com/opentracing/opentracing-go/log"
 )
+
+var errEventLogNotFound = errors.New("event log field not found")
 
 type fieldsAsMap map[string]string
 
@@ -36,15 +41,31 @@ func MaterializeWithJSON(logFields []log.Field) ([]byte, error) {
 	for _, field := range logFields {
 		field.Marshal(fields)
 	}
-	// if we only have an event log Field we do not create a json serialization of
-	// the key-value pairs contained within the log Fields, but simply return the
-	// payload of the event log Field.
-	if len(fields) == 1 {
-		if event, ok := fields["event"]; ok {
-			return []byte(event), nil
+	return json.Marshal(fields)
+}
+
+// MaterializeWithLogFmt converts log Fields into LogFmt string
+func MaterializeWithLogFmt(logFields []log.Field) ([]byte, error) {
+	var (
+		buffer  = bytes.NewBuffer(nil)
+		encoder = logfmt.NewEncoder(buffer)
+	)
+	for _, field := range logFields {
+		if err := encoder.EncodeKeyval(field.Key(), field.Value()); err != nil {
+			encoder.EncodeKeyval(field.Key(), err.Error())
 		}
 	}
-	return json.Marshal(fields)
+	return buffer.Bytes(), nil
+}
+
+// StrictZipkinMaterializer will only record a log.Field of type "event".
+func StrictZipkinMaterializer(logFields []log.Field) ([]byte, error) {
+	for _, field := range logFields {
+		if field.Key() == "event" {
+			return []byte(fmt.Sprintf("%+v", field.Value())), nil
+		}
+	}
+	return nil, errEventLogNotFound
 }
 
 func (ml fieldsAsMap) EmitString(key, value string) {

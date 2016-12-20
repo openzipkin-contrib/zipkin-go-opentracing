@@ -30,9 +30,8 @@ type TracerOptions struct {
 	// to allow deterministic sampling decisions to be made across different nodes.
 	shouldSample func(traceID uint64) bool
 	// trimUnsampledSpans turns potentially expensive operations on unsampled
-	// Spans into no-ops. More precisely, tags, baggage items, and log events
-	// are silently discarded. If NewSpanEventListener is set, the callbacks
-	// will still fire in that case.
+	// Spans into no-ops. More precisely, tags and log events are silently
+	// discarded. If NewSpanEventListener is set, the callbacks will still fire.
 	trimUnsampledSpans bool
 	// recorder receives Spans which have been finished.
 	recorder SpanRecorder
@@ -43,8 +42,16 @@ type TracerOptions struct {
 	// dropAllLogs turns log events on all Spans into no-ops.
 	// If NewSpanEventListener is set, the callbacks will still fire.
 	dropAllLogs bool
-	// logger ...
-	logger Logger
+	// MaxLogsPerSpan limits the number of Logs in a span (if set to a nonzero
+	// value). If a span has more logs than this value, logs are dropped as
+	// necessary (and replaced with a log describing how many were dropped).
+	//
+	// About half of the MaxLogPerSpan logs kept are the oldest logs, and about
+	// half are the newest logs.
+	//
+	// If NewSpanEventListener is set, the callbacks will still fire for all log
+	// events. This value is ignored if DropAllLogs is true.
+	maxLogsPerSpan int
 	// debugAssertSingleGoroutine internally records the ID of the goroutine
 	// creating each Span and verifies that no operation is carried out on
 	// it on a different goroutine.
@@ -80,6 +87,13 @@ type TracerOptions struct {
 	// When set, it attempts to exacerbate issues emanating from use of Spans
 	// after calling Finish by running additional assertions.
 	debugAssertUseAfterFinish bool
+	// enableSpanPool enables the use of a pool, so that the tracer reuses spans
+	// after Finish has been called on it. Adds a slight performance gain as it
+	// reduces allocations. However, if you have any use-after-finish race
+	// conditions the code may panic.
+	enableSpanPool bool
+	// logger ...
+	logger Logger
 	// clientServerSameSpan allows for Zipkin V1 style span per RPC. This places
 	// both client end and server end of a RPC call into the same span.
 	clientServerSameSpan bool
@@ -88,11 +102,6 @@ type TracerOptions struct {
 	// as it might flood your system if you have many traces starting from the
 	// service you are instrumenting.
 	debugMode bool
-	// enableSpanPool enables the use of a pool, so that the tracer reuses spans
-	// after Finish has been called on it. Adds a slight performance gain as it
-	// reduces allocations. However, if you have any use-after-finish race
-	// conditions the code may panic.
-	enableSpanPool bool
 	// traceID128Bit enables the generation of 128 bit traceIDs in case the tracer
 	// needs to create a root span. By default regular 64 bit traceIDs are used.
 	// Regardless of this setting, the library will propagate and support both
@@ -194,6 +203,17 @@ func NewSpanEventListener(f func() func(SpanEvent)) TracerOption {
 	}
 }
 
+// WithMaxLogsPerSpan option
+func WithMaxLogsPerSpan(limit int) TracerOption {
+	return func(opts *TracerOptions) error {
+		if limit < 5 || limit > 10000 {
+			return errors.New("invalid MaxLogsPerSpan limit. Should be between 5 and 10000")
+		}
+		opts.maxLogsPerSpan = limit
+		return nil
+	}
+}
+
 // NewTracer creates a new OpenTracing compatible Zipkin Tracer.
 func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Tracer, error) {
 	opts := &TracerOptions{
@@ -207,6 +227,7 @@ func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Trac
 		clientServerSameSpan:       false,
 		debugMode:                  false,
 		traceID128Bit:              false,
+		maxLogsPerSpan:             10000,
 	}
 	for _, o := range options {
 		err := o(opts)

@@ -3,6 +3,7 @@ package zipkintracer
 import (
 	"fmt"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/opentracing/opentracing-go/log"
@@ -41,7 +42,8 @@ func NewLogFieldValidator(t *testing.T, fields []log.Field) *LogFieldValidator {
 // []Field slices.
 func (fv *LogFieldValidator) ExpectNextFieldEquals(key string, kind reflect.Kind, valAsString string) *LogFieldValidator {
 	if len(fv.fields) < fv.fieldIdx {
-		fv.t.Errorf("Expecting more than the %v Fields we have", len(fv.fields))
+		_, file, line, _ := runtime.Caller(1)
+		fv.t.Errorf("%s:%d Expecting more than the %v Fields we have", file, line, len(fv.fields))
 	}
 	fv.nextKey = key
 	fv.nextKind = kind
@@ -107,15 +109,17 @@ func (fv *LogFieldValidator) EmitLazyLogger(value log.LazyLogger) {
 }
 
 func (fv *LogFieldValidator) validateNextField(key string, actualKind reflect.Kind, value interface{}) {
+	// Reference the ExpectNextField caller in error messages.
+	_, file, line, _ := runtime.Caller(4)
 	if fv.nextKey != key {
-		fv.t.Errorf("Bad key: expected %q, found %q", fv.nextKey, key)
+		fv.t.Errorf("%s:%d Bad key: expected %q, found %q", file, line, fv.nextKey, key)
 	}
 	if fv.nextKind != actualKind {
-		fv.t.Errorf("Bad reflect.Kind: expected %v, found %v", fv.nextKind, actualKind)
+		fv.t.Errorf("%s:%d Bad reflect.Kind: expected %v, found %v", file, line, fv.nextKind, actualKind)
 		return
 	}
 	if fv.nextValAsString != fmt.Sprint(value) {
-		fv.t.Errorf("Bad value: expected %q, found %q", fv.nextValAsString, fmt.Sprint(value))
+		fv.t.Errorf("%s:%d Bad value: expected %q, found %q", file, line, fv.nextValAsString, fmt.Sprint(value))
 	}
 	// All good.
 }

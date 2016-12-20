@@ -75,13 +75,13 @@ func TestSpanPropagator(t *testing.T) {
 		if err := tracer.Inject(sp.Context(), test.typ, test.carrier); err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		extractedContext, err := tracer.Extract(test.typ, test.carrier)
+		injectedContext, err := tracer.Extract(test.typ, test.carrier)
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
 		child := tracer.StartSpan(
 			op,
-			opentracing.ChildOf(extractedContext))
+			opentracing.ChildOf(injectedContext))
 		child.Finish()
 	}
 	sp.Finish()
@@ -112,5 +112,22 @@ func TestSpanPropagator(t *testing.T) {
 		if !reflect.DeepEqual(exp, sp) {
 			t.Fatalf("%d: wanted %+v, got %+v", i, spew.Sdump(exp), spew.Sdump(sp))
 		}
+	}
+}
+
+func TestInvalidCarrier(t *testing.T) {
+	recorder := zipkintracer.NewInMemoryRecorder()
+	tracer, err := zipkintracer.NewTracer(
+		recorder,
+		zipkintracer.ClientServerSameSpan(true),
+		zipkintracer.DebugMode(true),
+		zipkintracer.TraceID128Bit(true),
+	)
+	if err != nil {
+		t.Fatalf("Unable to create Tracer: %+v", err)
+	}
+
+	if _, err = tracer.Extract(zipkintracer.Delegator, "invalid carrier"); err == nil {
+		t.Fatalf("Expected: %s, got nil", opentracing.ErrInvalidCarrier)
 	}
 }

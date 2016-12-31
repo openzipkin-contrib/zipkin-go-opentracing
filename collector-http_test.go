@@ -182,6 +182,38 @@ func TestHttpCollector_NonBlockCollect(t *testing.T) {
 
 }
 
+func TestHttpCollector_MaxBatchSize(t *testing.T) {
+	t.Parallel()
+
+	port := 10004
+	server := newHTTPServer(t, port)
+
+	var (
+		maxBacklog = 5
+		batchSize  = maxBacklog * 2 // make backsize bigger than backlog enable testing backlog disposal
+	)
+
+	c, err := NewHTTPCollector(fmt.Sprintf("http://localhost:%d/api/v1/span", port),
+		HTTPMaxBacklog(maxBacklog),
+		HTTPBatchSize(batchSize),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := 0; i < batchSize; i++ {
+		c.Collect(makeNewSpan("", "", "", 0, int64(i), 0, false))
+	}
+	c.Close()
+
+	for i, s := range server.spans() {
+		if want, have := int64(i+maxBacklog), s.ID; want != have {
+			t.Errorf("Span ID is wrong. want %d, have %d", want, have)
+		}
+	}
+
+}
+
 type httpServer struct {
 	t           *testing.T
 	zipkinSpans []*zipkincore.Span

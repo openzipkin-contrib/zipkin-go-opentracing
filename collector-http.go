@@ -8,6 +8,7 @@ import (
 	"github.com/apache/thrift/lib/go/thrift"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	"sync"
 )
 
 // Default timeout for http request in seconds
@@ -26,9 +27,10 @@ type HTTPCollector struct {
 	batchSize     int
 	batch         []*zipkincore.Span
 	spanc         chan *zipkincore.Span
-	sendc         chan struct{}
 	quit          chan struct{}
 	shutdown      chan error
+	sendMutex     *sync.Mutex
+	batchMutex    *sync.Mutex
 }
 
 // HTTPOption sets a parameter for the HttpCollector
@@ -71,15 +73,16 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 		batchSize:     100,
 		batch:         []*zipkincore.Span{},
 		spanc:         make(chan *zipkincore.Span),
-		sendc:         make(chan struct{}),
 		quit:          make(chan struct{}, 1),
 		shutdown:      make(chan error, 1),
+		sendMutex:     &sync.Mutex{},
+		batchMutex:    &sync.Mutex{},
 	}
 
 	for _, option := range options {
 		option(c)
 	}
-	c.nextSend = time.Now().Add(c.batchInterval)
+	c.scheduleNextSend()
 	go c.loop()
 	return c, nil
 }
@@ -119,26 +122,21 @@ func (c *HTTPCollector) loop() {
 		var err error
 		select {
 		case span := <-c.spanc:
+			c.batchMutex.Lock()
 			c.batch = append(c.batch, span)
-			if len(c.batch) >= c.batchSize {
+			currentBatchSize := len(c.batch)
+			c.batchMutex.Unlock()
+			if currentBatchSize >= c.batchSize {
+				c.scheduleNextSend()
 				go c.sendNow()
 			}
 		case <-tickc:
-			if time.Now().After(c.nextSend) && len(c.batch) > 0 {
+			if time.Now().After(c.nextSend) {
+				c.scheduleNextSend()
 				go c.sendNow()
 			}
-		case <-c.sendc:
-			c.nextSend = time.Now().Add(c.batchInterval)
-			if err = c.send(c.batch); err != nil {
-				_ = c.logger.Log("err", err.Error())
-			}
-			c.batch = c.batch[:0]
 		case <-c.quit:
-			if len(c.batch) > 0 {
-				if err = c.send(c.batch); err != nil {
-					_ = c.logger.Log("err", err.Error())
-				}
-			}
+			c.sendNow()
 			c.shutdown <- err
 			return
 		}
@@ -161,5 +159,37 @@ func (c *HTTPCollector) send(spans []*zipkincore.Span) error {
 }
 
 func (c *HTTPCollector) sendNow() {
-	c.sendc <- struct{}{}
+	// in order to prevent sending the same batch twice
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	// Select all current spans in the batch to be sent
+	c.batchMutex.Lock()
+	sendBatch := c.batch[:]
+	c.batchMutex.Unlock()
+
+	// Do not send an empty batch
+	if len(sendBatch) == 0 {
+		return
+	}
+
+	if err := c.send(sendBatch); err != nil {
+		c.logger.Log("err", err.Error())
+		return
+	}
+
+	// Remove sent spans from the batch
+	c.batchMutex.Lock()
+	c.batch = c.batch[len(sendBatch):]
+	c.batchMutex.Unlock()
+}
+
+func (c *HTTPCollector) currentBatchSize() int {
+	c.batchMutex.Lock()
+	defer c.batchMutex.Unlock()
+	return len(c.batch)
+}
+
+func (c *HTTPCollector) scheduleNextSend() {
+	c.nextSend = time.Now().Add(c.batchInterval)
 }

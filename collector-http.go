@@ -21,6 +21,9 @@ const defaultHTTPBatchSize = 100
 
 const defaultHTTPMaxBacklog = 1000
 
+// defaultLogErrorInterval
+const defaultLogErrorInterval = time.Second * 60
+
 // HTTPCollector implements Collector by forwarding spans to a http server.
 type HTTPCollector struct {
 	logger        Logger
@@ -35,6 +38,7 @@ type HTTPCollector struct {
 	shutdown      chan error
 	sendMutex     *sync.Mutex
 	batchMutex    *sync.Mutex
+	stateLogger   *StateLogger
 }
 
 // HTTPOption sets a parameter for the HttpCollector
@@ -71,13 +75,21 @@ func HTTPBatchInterval(d time.Duration) HTTPOption {
 	return func(c *HTTPCollector) { c.batchInterval = d }
 }
 
+// HTTPLogErrorInterval sets the maximal interval between logging
+// of the same error into the log.
+// Setting it to 0 will log every error into the log
+func HTTPLogErrorInterval(d time.Duration) HTTPOption {
+	return func(c *HTTPCollector) { c.stateLogger = NewStateLogger(c.logger, d) }
+}
+
 // NewHTTPCollector returns a new HTTP-backend Collector. url should be a http
 // url for handle post request. timeout is passed to http client. queueSize control
 // the maximum size of buffer of async queue. The logger is used to log errors,
 // such as send failures;
 func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
+	logger := NewNopLogger()
 	c := &HTTPCollector{
-		logger:        NewNopLogger(),
+		logger:        logger,
 		url:           url,
 		client:        &http.Client{Timeout: defaultHTTPTimeout},
 		batchInterval: defaultHTTPBatchInterval * time.Second,
@@ -89,6 +101,7 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 		shutdown:      make(chan error, 1),
 		sendMutex:     &sync.Mutex{},
 		batchMutex:    &sync.Mutex{},
+		stateLogger:   NewStateLogger(logger, defaultLogErrorInterval),
 	}
 
 	for _, option := range options {
@@ -195,9 +208,10 @@ func (c *HTTPCollector) send() error {
 	}
 	req.Header.Set("Content-Type", "application/x-thrift")
 	if _, err = c.client.Do(req); err != nil {
-		c.logger.Log("err", err.Error())
+		c.stateLogger.LogError(err)
 		return err
 	}
+	c.stateLogger.Fixed("Connection restored")
 
 	// Remove sent spans from the batch
 	c.batchMutex.Lock()

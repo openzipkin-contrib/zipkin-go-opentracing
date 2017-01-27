@@ -3,6 +3,7 @@ package zipkintracer
 import (
 	"bytes"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
@@ -16,19 +17,24 @@ const defaultHTTPTimeout = time.Second * 5
 // defaultBatchInterval in seconds
 const defaultHTTPBatchInterval = 1
 
+const defaultHTTPBatchSize = 100
+
+const defaultHTTPMaxBacklog = 1000
+
 // HTTPCollector implements Collector by forwarding spans to a http server.
 type HTTPCollector struct {
 	logger        Logger
 	url           string
 	client        *http.Client
-	nextSend      time.Time
 	batchInterval time.Duration
 	batchSize     int
+	maxBacklog    int
 	batch         []*zipkincore.Span
 	spanc         chan *zipkincore.Span
-	sendc         chan struct{}
 	quit          chan struct{}
 	shutdown      chan error
+	sendMutex     *sync.Mutex
+	batchMutex    *sync.Mutex
 }
 
 // HTTPOption sets a parameter for the HttpCollector
@@ -52,6 +58,13 @@ func HTTPBatchSize(n int) HTTPOption {
 	return func(c *HTTPCollector) { c.batchSize = n }
 }
 
+// HTTPMaxBacklog sets the maximum backlog size,
+// when batch size reaches this threshold, spans from the
+// beginning of the batch will be disposed
+func HTTPMaxBacklog(n int) HTTPOption {
+	return func(c *HTTPCollector) { c.maxBacklog = n }
+}
+
 // HTTPBatchInterval sets the maximum duration we will buffer traces before
 // emitting them to the collector. The default batch interval is 1 second.
 func HTTPBatchInterval(d time.Duration) HTTPOption {
@@ -68,18 +81,20 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 		url:           url,
 		client:        &http.Client{Timeout: defaultHTTPTimeout},
 		batchInterval: defaultHTTPBatchInterval * time.Second,
-		batchSize:     100,
+		batchSize:     defaultHTTPBatchSize,
+		maxBacklog:    defaultHTTPMaxBacklog,
 		batch:         []*zipkincore.Span{},
 		spanc:         make(chan *zipkincore.Span),
-		sendc:         make(chan struct{}),
 		quit:          make(chan struct{}, 1),
 		shutdown:      make(chan error, 1),
+		sendMutex:     &sync.Mutex{},
+		batchMutex:    &sync.Mutex{},
 	}
 
 	for _, option := range options {
 		option(c)
 	}
-	c.nextSend = time.Now().Add(c.batchInterval)
+
 	go c.loop()
 	return c, nil
 }
@@ -92,7 +107,7 @@ func (c *HTTPCollector) Collect(s *zipkincore.Span) error {
 
 // Close implements Collector.
 func (c *HTTPCollector) Close() error {
-	c.quit <- struct{}{}
+	close(c.quit)
 	return <-c.shutdown
 }
 
@@ -114,52 +129,80 @@ func httpSerialize(spans []*zipkincore.Span) *bytes.Buffer {
 }
 
 func (c *HTTPCollector) loop() {
-	tickc := time.Tick(c.batchInterval / 10)
+	var (
+		nextSend = time.Now().Add(c.batchInterval)
+		ticker   = time.NewTicker(c.batchInterval / 10)
+		tickc    = ticker.C
+	)
+	defer ticker.Stop()
+
 	for {
-		var err error
 		select {
 		case span := <-c.spanc:
-			c.batch = append(c.batch, span)
-			if len(c.batch) >= c.batchSize {
-				go c.sendNow()
+			currentBatchSize := c.append(span)
+			if currentBatchSize >= c.batchSize {
+				nextSend = time.Now().Add(c.batchInterval)
+				go c.send()
 			}
 		case <-tickc:
-			if time.Now().After(c.nextSend) && len(c.batch) > 0 {
-				go c.sendNow()
+			if time.Now().After(nextSend) {
+				nextSend = time.Now().Add(c.batchInterval)
+				go c.send()
 			}
-		case <-c.sendc:
-			c.nextSend = time.Now().Add(c.batchInterval)
-			if err = c.send(c.batch); err != nil {
-				_ = c.logger.Log("err", err.Error())
-			}
-			c.batch = c.batch[:0]
 		case <-c.quit:
-			if len(c.batch) > 0 {
-				if err = c.send(c.batch); err != nil {
-					_ = c.logger.Log("err", err.Error())
-				}
-			}
-			c.shutdown <- err
+			c.shutdown <- c.send()
 			return
 		}
 	}
 }
 
-func (c *HTTPCollector) send(spans []*zipkincore.Span) error {
+func (c *HTTPCollector) append(span *zipkincore.Span) (newBatchSize int) {
+	c.batchMutex.Lock()
+	defer c.batchMutex.Unlock()
+
+	c.batch = append(c.batch, span)
+	if len(c.batch) > c.maxBacklog {
+		dispose := len(c.batch) - c.maxBacklog
+		c.logger.Log("Backlog too long, disposing spans.", "count", dispose)
+		c.batch = c.batch[dispose:]
+	}
+	newBatchSize = len(c.batch)
+	return
+}
+
+func (c *HTTPCollector) send() error {
+	// in order to prevent sending the same batch twice
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	// Select all current spans in the batch to be sent
+	c.batchMutex.Lock()
+	sendBatch := c.batch[:]
+	c.batchMutex.Unlock()
+
+	// Do not send an empty batch
+	if len(sendBatch) == 0 {
+		return nil
+	}
+
 	req, err := http.NewRequest(
 		"POST",
 		c.url,
-		httpSerialize(spans))
+		httpSerialize(sendBatch))
 	if err != nil {
+		c.logger.Log("err", err.Error())
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-thrift")
+	if _, err = c.client.Do(req); err != nil {
+		c.logger.Log("err", err.Error())
+		return err
+	}
 
-	_, err = c.client.Do(req)
+	// Remove sent spans from the batch
+	c.batchMutex.Lock()
+	c.batch = c.batch[len(sendBatch):]
+	c.batchMutex.Unlock()
 
-	return err
-}
-
-func (c *HTTPCollector) sendNow() {
-	c.sendc <- struct{}{}
+	return nil
 }

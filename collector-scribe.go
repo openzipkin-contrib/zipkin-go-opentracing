@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
@@ -14,24 +15,63 @@ import (
 
 const defaultScribeCategory = "zipkin"
 
-// defaultBatchInterval in seconds
-const defaultBatchInterval = 1
+// defaultScribeBatchInterval in seconds
+const defaultScribeBatchInterval = 1
+
+const defaultScribeBatchSize = 100
+
+const defaultScribeMaxBacklog = 1000
 
 // ScribeCollector implements Collector by forwarding spans to a Scribe
 // service, in batches.
 type ScribeCollector struct {
-	client        scribe.Scribe
-	factory       func() (scribe.Scribe, error)
-	spanc         chan *zipkincore.Span
-	sendc         chan struct{}
-	batch         []*scribe.LogEntry
-	nextSend      time.Time
-	batchInterval time.Duration
-	batchSize     int
 	logger        Logger
 	category      string
+	factory       func() (scribe.Scribe, error)
+	client        scribe.Scribe
+	batchInterval time.Duration
+	batchSize     int
+	maxBacklog    int
+	batch         []*scribe.LogEntry
+	spanc         chan *zipkincore.Span
 	quit          chan struct{}
 	shutdown      chan error
+	sendMutex     *sync.Mutex
+	batchMutex    *sync.Mutex
+}
+
+// ScribeOption sets a parameter for the StdlibAdapter.
+type ScribeOption func(s *ScribeCollector)
+
+// ScribeLogger sets the logger used to report errors in the collection
+// process. By default, a no-op logger is used, i.e. no errors are logged
+// anywhere. It's important to set this option in a production service.
+func ScribeLogger(logger Logger) ScribeOption {
+	return func(s *ScribeCollector) { s.logger = logger }
+}
+
+// ScribeBatchSize sets the maximum batch size, after which a collect will be
+// triggered. The default batch size is 100 traces.
+func ScribeBatchSize(n int) ScribeOption {
+	return func(s *ScribeCollector) { s.batchSize = n }
+}
+
+// ScribeMaxBacklog sets the maximum backlog size,
+// when batch size reaches this threshold, spans from the
+// beginning of the batch will be disposed
+func ScribeMaxBacklog(n int) ScribeOption {
+	return func(c *ScribeCollector) { c.maxBacklog = n }
+}
+
+// ScribeBatchInterval sets the maximum duration we will buffer traces before
+// emitting them to the collector. The default batch interval is 1 second.
+func ScribeBatchInterval(d time.Duration) ScribeOption {
+	return func(s *ScribeCollector) { s.batchInterval = d }
+}
+
+// ScribeCategory sets the Scribe category used to transmit the spans.
+func ScribeCategory(category string) ScribeOption {
+	return func(s *ScribeCollector) { s.category = category }
 }
 
 // NewScribeCollector returns a new Scribe-backed Collector. addr should be a
@@ -47,22 +87,25 @@ func NewScribeCollector(addr string, timeout time.Duration, options ...ScribeOpt
 		return nil, err
 	}
 	c := &ScribeCollector{
-		client:        client,
-		factory:       factory,
-		spanc:         make(chan *zipkincore.Span),
-		sendc:         make(chan struct{}),
-		batch:         []*scribe.LogEntry{},
-		batchInterval: defaultBatchInterval * time.Second,
-		batchSize:     100,
 		logger:        NewNopLogger(),
 		category:      defaultScribeCategory,
+		factory:       factory,
+		client:        client,
+		batchInterval: defaultScribeBatchInterval * time.Second,
+		batchSize:     defaultScribeBatchSize,
+		maxBacklog:    defaultScribeMaxBacklog,
+		batch:         []*scribe.LogEntry{},
+		spanc:         make(chan *zipkincore.Span),
 		quit:          make(chan struct{}),
 		shutdown:      make(chan error, 1),
+		sendMutex:     &sync.Mutex{},
+		batchMutex:    &sync.Mutex{},
 	}
+
 	for _, option := range options {
 		option(c)
 	}
-	c.nextSend = time.Now().Add(c.batchInterval)
+
 	go c.loop()
 	return c, nil
 }
@@ -79,90 +122,97 @@ func (c *ScribeCollector) Close() error {
 	return <-c.shutdown
 }
 
+func scribeSerialize(s *zipkincore.Span) string {
+	t := thrift.NewTMemoryBuffer()
+	p := thrift.NewTBinaryProtocolTransport(t)
+	if err := s.Write(p); err != nil {
+		panic(err)
+	}
+	return base64.StdEncoding.EncodeToString(t.Buffer.Bytes())
+}
+
 func (c *ScribeCollector) loop() {
-	tickc := time.Tick(c.batchInterval / 10)
+	var (
+		nextSend = time.Now().Add(c.batchInterval)
+		ticker   = time.NewTicker(c.batchInterval / 10)
+		tickc    = ticker.C
+	)
+	defer ticker.Stop()
 
 	for {
-		var err error
 		select {
 		case span := <-c.spanc:
-			c.batch = append(c.batch, &scribe.LogEntry{
-				Category: c.category,
-				Message:  scribeSerialize(span),
-			})
-			if len(c.batch) >= c.batchSize {
-				go c.sendNow()
+			currentBatchSize := c.append(span)
+			if currentBatchSize >= c.batchSize {
+				nextSend = time.Now().Add(c.batchInterval)
+				go c.send()
 			}
-
 		case <-tickc:
-			if time.Now().After(c.nextSend) && len(c.batch) > 0 {
-				go c.sendNow()
+			if time.Now().After(nextSend) {
+				nextSend = time.Now().Add(c.batchInterval)
+				go c.send()
 			}
-
-		case <-c.sendc:
-			c.nextSend = time.Now().Add(c.batchInterval)
-			if err = c.send(c.batch); err != nil {
-				_ = c.logger.Log("err", err.Error())
-			}
-			c.batch = c.batch[:0]
 		case <-c.quit:
-			if len(c.batch) > 0 {
-				if err = c.send(c.batch); err != nil {
-					_ = c.logger.Log("err", err.Error())
-				}
-			}
-			c.shutdown <- err
+			c.shutdown <- c.send()
 			return
 		}
 	}
 }
 
-func (c *ScribeCollector) sendNow() {
-	c.sendc <- struct{}{}
+func (c *ScribeCollector) append(span *zipkincore.Span) (newBatchSize int) {
+	c.batchMutex.Lock()
+	defer c.batchMutex.Unlock()
+
+	c.batch = append(c.batch, &scribe.LogEntry{
+		Category: c.category,
+		Message:  scribeSerialize(span),
+	})
+	if len(c.batch) > c.maxBacklog {
+		dispose := len(c.batch) - c.maxBacklog
+		c.logger.Log("Backlog too long, disposing spans.", "count", dispose)
+		c.batch = c.batch[dispose:]
+	}
+	newBatchSize = len(c.batch)
+	return
 }
 
-func (c *ScribeCollector) send(batch []*scribe.LogEntry) error {
+func (c *ScribeCollector) send() error {
+	// in order to prevent sending the same batch twice
+	c.sendMutex.Lock()
+	defer c.sendMutex.Unlock()
+
+	// Select all current spans in the batch to be sent
+	c.batchMutex.Lock()
+	sendBatch := c.batch[:]
+	c.batchMutex.Unlock()
+
+	// Do not send an empty batch
+	if len(sendBatch) == 0 {
+		return nil
+	}
+
 	if c.client == nil {
 		var err error
 		if c.client, err = c.factory(); err != nil {
-			return fmt.Errorf("during reconnect: %v", err)
+			_ = c.logger.Log("err", fmt.Sprintf("during reconnect: %v", err))
+			return err
 		}
 	}
-	if rc, err := c.client.Log(c.batch); err != nil {
+	if rc, err := c.client.Log(sendBatch); err != nil {
 		c.client = nil
-		return fmt.Errorf("during Log: %v", err)
+		_ = c.logger.Log("err", fmt.Sprintf("during Log: %v", err))
+		return err
 	} else if rc != scribe.ResultCode_OK {
 		// probably transient error; don't reset client
-		return fmt.Errorf("remote returned %s", rc)
+		_ = c.logger.Log("err", fmt.Sprintf("remote returned %s", rc))
 	}
+
+	// Remove sent spans from the batch
+	c.batchMutex.Lock()
+	c.batch = c.batch[len(sendBatch):]
+	c.batchMutex.Unlock()
+
 	return nil
-}
-
-// ScribeOption sets a parameter for the StdlibAdapter.
-type ScribeOption func(s *ScribeCollector)
-
-// ScribeBatchSize sets the maximum batch size, after which a collect will be
-// triggered. The default batch size is 100 traces.
-func ScribeBatchSize(n int) ScribeOption {
-	return func(s *ScribeCollector) { s.batchSize = n }
-}
-
-// ScribeBatchInterval sets the maximum duration we will buffer traces before
-// emitting them to the collector. The default batch interval is 1 second.
-func ScribeBatchInterval(d time.Duration) ScribeOption {
-	return func(s *ScribeCollector) { s.batchInterval = d }
-}
-
-// ScribeLogger sets the logger used to report errors in the collection
-// process. By default, a no-op logger is used, i.e. no errors are logged
-// anywhere. It's important to set this option in a production service.
-func ScribeLogger(logger Logger) ScribeOption {
-	return func(s *ScribeCollector) { s.logger = logger }
-}
-
-// ScribeCategory sets the Scribe category used to transmit the spans.
-func ScribeCategory(category string) ScribeOption {
-	return func(s *ScribeCollector) { s.category = category }
 }
 
 func scribeClientFactory(addr string, timeout time.Duration) func() (scribe.Scribe, error) {
@@ -181,13 +231,4 @@ func scribeClientFactory(addr string, timeout time.Duration) func() (scribe.Scri
 		client := scribe.NewScribeClientProtocol(transport, proto, proto)
 		return client, nil
 	}
-}
-
-func scribeSerialize(s *zipkincore.Span) string {
-	t := thrift.NewTMemoryBuffer()
-	p := thrift.NewTBinaryProtocolTransport(t)
-	if err := s.Write(p); err != nil {
-		panic(err)
-	}
-	return base64.StdEncoding.EncodeToString(t.Buffer.Bytes())
 }

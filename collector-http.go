@@ -15,7 +15,7 @@ import (
 const defaultHTTPTimeout = time.Second * 5
 
 // defaultBatchInterval in seconds
-const defaultHTTPBatchInterval = 1
+const defaultHTTPBatchInterval = time.Second * 1
 
 const defaultHTTPBatchSize = 100
 
@@ -92,7 +92,7 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 		logger:        logger,
 		url:           url,
 		client:        &http.Client{Timeout: defaultHTTPTimeout},
-		batchInterval: defaultHTTPBatchInterval * time.Second,
+		batchInterval: defaultHTTPBatchInterval,
 		batchSize:     defaultHTTPBatchSize,
 		maxBacklog:    defaultHTTPMaxBacklog,
 		batch:         []*zipkincore.Span{},

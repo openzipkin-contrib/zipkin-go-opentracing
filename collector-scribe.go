@@ -20,6 +20,7 @@ const defaultBatchInterval = 1
 // ScribeCollector implements Collector by forwarding spans to a Scribe
 // service, in batches.
 type ScribeCollector struct {
+	logger        Logger
 	client        scribe.Scribe
 	factory       func() (scribe.Scribe, error)
 	spanc         chan *zipkincore.Span
@@ -28,7 +29,6 @@ type ScribeCollector struct {
 	nextSend      time.Time
 	batchInterval time.Duration
 	batchSize     int
-	logger        Logger
 	category      string
 	quit          chan struct{}
 	shutdown      chan error
@@ -80,7 +80,9 @@ func (c *ScribeCollector) Close() error {
 }
 
 func (c *ScribeCollector) loop() {
-	tickc := time.Tick(c.batchInterval / 10)
+	ticker := time.NewTicker(c.batchInterval / 10)
+	defer ticker.Stop()
+	tickc := ticker.C
 
 	for {
 		var err error

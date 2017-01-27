@@ -3,12 +3,12 @@ package zipkintracer
 import (
 	"bytes"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
-	"sync"
 )
 
 // Default timeout for http request in seconds
@@ -130,7 +130,10 @@ func httpSerialize(spans []*zipkincore.Span) *bytes.Buffer {
 }
 
 func (c *HTTPCollector) loop() {
-	tickc := time.Tick(c.batchInterval / 10)
+	ticker := time.NewTicker(c.batchInterval / 10)
+	defer ticker.Stop()
+	tickc := ticker.C
+
 	for {
 		var err error
 		select {

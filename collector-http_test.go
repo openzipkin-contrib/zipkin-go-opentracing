@@ -10,6 +10,7 @@ import (
 	"github.com/apache/thrift/lib/go/thrift"
 
 	"fmt"
+
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )
 

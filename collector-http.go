@@ -17,16 +17,15 @@ const defaultHTTPTimeout = time.Second * 5
 // defaultBatchInterval in seconds
 const defaultHTTPBatchInterval = 1
 
-const defaultBatchSize = 100
+const defaultHTTPBatchSize = 100
 
-const defaultMaxBacklog = 1000
+const defaultHTTPMaxBacklog = 1000
 
 // HTTPCollector implements Collector by forwarding spans to a http server.
 type HTTPCollector struct {
 	logger        Logger
 	url           string
 	client        *http.Client
-	nextSend      time.Time
 	batchInterval time.Duration
 	batchSize     int
 	maxBacklog    int
@@ -82,8 +81,8 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 		url:           url,
 		client:        &http.Client{Timeout: defaultHTTPTimeout},
 		batchInterval: defaultHTTPBatchInterval * time.Second,
-		batchSize:     defaultBatchSize,
-		maxBacklog:    defaultMaxBacklog,
+		batchSize:     defaultHTTPBatchSize,
+		maxBacklog:    defaultHTTPMaxBacklog,
 		batch:         []*zipkincore.Span{},
 		spanc:         make(chan *zipkincore.Span),
 		quit:          make(chan struct{}, 1),
@@ -95,7 +94,7 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 	for _, option := range options {
 		option(c)
 	}
-	c.scheduleNextSend()
+
 	go c.loop()
 	return c, nil
 }
@@ -108,7 +107,7 @@ func (c *HTTPCollector) Collect(s *zipkincore.Span) error {
 
 // Close implements Collector.
 func (c *HTTPCollector) Close() error {
-	c.quit <- struct{}{}
+	close(c.quit)
 	return <-c.shutdown
 }
 
@@ -130,27 +129,28 @@ func httpSerialize(spans []*zipkincore.Span) *bytes.Buffer {
 }
 
 func (c *HTTPCollector) loop() {
-	ticker := time.NewTicker(c.batchInterval / 10)
+	var (
+		nextSend = time.Now().Add(c.batchInterval)
+		ticker   = time.NewTicker(c.batchInterval / 10)
+		tickc    = ticker.C
+	)
 	defer ticker.Stop()
-	tickc := ticker.C
 
 	for {
-		var err error
 		select {
 		case span := <-c.spanc:
 			currentBatchSize := c.append(span)
 			if currentBatchSize >= c.batchSize {
-				c.scheduleNextSend()
-				go c.sendNow()
+				nextSend = time.Now().Add(c.batchInterval)
+				go c.send()
 			}
 		case <-tickc:
-			if time.Now().After(c.nextSend) {
-				c.scheduleNextSend()
-				go c.sendNow()
+			if time.Now().After(nextSend) {
+				nextSend = time.Now().Add(c.batchInterval)
+				go c.send()
 			}
 		case <-c.quit:
-			c.sendNow()
-			c.shutdown <- err
+			c.shutdown <- c.send()
 			return
 		}
 	}
@@ -159,6 +159,7 @@ func (c *HTTPCollector) loop() {
 func (c *HTTPCollector) append(span *zipkincore.Span) (newBatchSize int) {
 	c.batchMutex.Lock()
 	defer c.batchMutex.Unlock()
+
 	c.batch = append(c.batch, span)
 	if len(c.batch) > c.maxBacklog {
 		dispose := len(c.batch) - c.maxBacklog
@@ -169,22 +170,7 @@ func (c *HTTPCollector) append(span *zipkincore.Span) (newBatchSize int) {
 	return
 }
 
-func (c *HTTPCollector) send(spans []*zipkincore.Span) error {
-	req, err := http.NewRequest(
-		"POST",
-		c.url,
-		httpSerialize(spans))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/x-thrift")
-
-	_, err = c.client.Do(req)
-
-	return err
-}
-
-func (c *HTTPCollector) sendNow() {
+func (c *HTTPCollector) send() error {
 	// in order to prevent sending the same batch twice
 	c.sendMutex.Lock()
 	defer c.sendMutex.Unlock()
@@ -196,26 +182,27 @@ func (c *HTTPCollector) sendNow() {
 
 	// Do not send an empty batch
 	if len(sendBatch) == 0 {
-		return
+		return nil
 	}
 
-	if err := c.send(sendBatch); err != nil {
+	req, err := http.NewRequest(
+		"POST",
+		c.url,
+		httpSerialize(sendBatch))
+	if err != nil {
 		c.logger.Log("err", err.Error())
-		return
+		return err
+	}
+	req.Header.Set("Content-Type", "application/x-thrift")
+	if _, err = c.client.Do(req); err != nil {
+		c.logger.Log("err", err.Error())
+		return err
 	}
 
 	// Remove sent spans from the batch
 	c.batchMutex.Lock()
 	c.batch = c.batch[len(sendBatch):]
 	c.batchMutex.Unlock()
-}
 
-func (c *HTTPCollector) currentBatchSize() int {
-	c.batchMutex.Lock()
-	defer c.batchMutex.Unlock()
-	return len(c.batch)
-}
-
-func (c *HTTPCollector) scheduleNextSend() {
-	c.nextSend = time.Now().Add(c.batchInterval)
+	return nil
 }

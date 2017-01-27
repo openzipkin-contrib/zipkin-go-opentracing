@@ -30,25 +30,25 @@ func NewStateLogger(logger Logger, logErrorInterval time.Duration) *StateLogger 
 
 // LogError logs an error if it is different from the last seen error,
 // or that logErrorInterval have passed since the last reported error.
-func (se *StateLogger) LogError(err error) {
-	se.mutex.Lock()
-	defer se.mutex.Unlock()
-	if err == se.lastError && time.Since(se.lastErrorTime) < se.logErrorInterval {
+func (sl *StateLogger) LogError(err error) {
+	sl.mutex.Lock()
+	defer sl.mutex.Unlock()
+	if err == sl.lastError && time.Since(sl.lastErrorTime) < sl.logErrorInterval {
 		return
 	}
-	se.logger.Log("err", err.Error())
-	se.lastError = err
-	se.lastErrorTime = time.Now()
+	sl.logger.Log("err", err.Error())
+	sl.lastError = err
+	sl.lastErrorTime = time.Now()
 }
 
 // Fixed makes the stateLogger understand that the state is fixed, and when
 // the next error will occur, it will log it.
-func (se *StateLogger) Fixed(keyVal ...interface{}) {
-	se.mutex.Lock()
-	defer se.mutex.Unlock()
-	if se.logErrorInterval == 0 || se.lastError == nil {
+func (sl *StateLogger) Fixed(keyVal ...interface{}) {
+	sl.mutex.Lock()
+	defer sl.mutex.Unlock()
+	if sl.logErrorInterval == 0 || sl.lastError == nil {
 		return
 	}
-	se.logger.Log(keyVal...)
-	se.lastError = nil
+	sl.logger.Log(keyVal...)
+	sl.lastError = nil
 }

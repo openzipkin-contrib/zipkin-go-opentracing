@@ -1,12 +1,16 @@
 package zipkintracer
 
 import (
-	"github.com/stretchr/testify/mock"
+	"fmt"
 	"testing"
 	"time"
-	"fmt"
+
+	"github.com/stretchr/testify/mock"
 )
 
+var safeWait = 100 * time.Millisecond
+
+const fixed = "fixed"
 
 type mockLogger struct {
 	mock.Mock
@@ -19,13 +23,10 @@ func (l *mockLogger) Log(keyvals ...interface{}) error {
 }
 
 func TestStateLogger(t *testing.T) {
-	safeWait := 100 * time.Millisecond
 	err1 := fmt.Errorf("error 1")
 	err2 := fmt.Errorf("error 2")
-	fixed := "fixed"
 
 	m := new(mockLogger)
-
 	l := NewStateLogger(m, safeWait)
 
 	m.On("Log", "err", err1.Error()).Return(nil).Once()
@@ -67,10 +68,8 @@ func TestStateLogger(t *testing.T) {
 func TestStateLoggerAlwaysLog(t *testing.T) {
 	err1 := fmt.Errorf("error 1")
 	err2 := fmt.Errorf("error 2")
-	fixed := "fixed"
 
 	m := new(mockLogger)
-
 	l := NewStateLogger(m, 0)
 
 	m.On("Log", "err", err1.Error()).Return(nil).Once()
@@ -102,4 +101,26 @@ func TestStateLoggerAlwaysLog(t *testing.T) {
 	m.On("Log", "err", err2.Error()).Return(nil).Once()
 	l.LogError(err2)
 	m.AssertNumberOfCalls(t, "Log", 6)
+}
+
+func TestStateFirstFixed(t *testing.T) {
+	m := new(mockLogger)
+	l := NewStateLogger(m, safeWait)
+
+	l.Fixed(fixed)
+	m.AssertNumberOfCalls(t, "Log", 0)
+}
+
+func TestStateErrorsWithTheSameMessage(t *testing.T) {
+	err := fmt.Errorf("error 1")
+	errCopy := fmt.Errorf("error 1")
+
+	m := new(mockLogger)
+	l := NewStateLogger(m, safeWait)
+
+	m.On("Log", "err", err.Error()).Return(nil).Once()
+	l.LogError(err)
+	m.AssertNumberOfCalls(t, "Log", 1)
+	l.LogError(errCopy)
+	m.AssertNumberOfCalls(t, "Log", 1)
 }

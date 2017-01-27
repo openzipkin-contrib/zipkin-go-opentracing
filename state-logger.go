@@ -1,12 +1,12 @@
 package zipkintracer
 
 import (
-	"fmt"
+	"errors"
 	"sync"
 	"time"
 )
 
-var errNoError = fmt.Errorf("not an error")
+var errNoError = errors.New("not an error")
 
 // StateLogger is a Logger that logs error only if logErrorInterval have passed
 // from the last error, or it is a different error than the last seen.
@@ -34,7 +34,7 @@ func (sl *StateLogger) LogError(err error) {
 	if sl.logErrorInterval != 0 {
 		sl.mutex.Lock()
 		defer sl.mutex.Unlock()
-		if err == sl.lastError && time.Since(sl.lastErrorTime) < sl.logErrorInterval {
+		if err.Error() == sl.lastError.Error() && time.Since(sl.lastErrorTime) < sl.logErrorInterval {
 			return
 		}
 		sl.lastError = err
@@ -54,10 +54,10 @@ func (sl *StateLogger) Fixed(keyVal ...interface{}) {
 
 	sl.mutex.Lock()
 	defer sl.mutex.Unlock()
-	if sl.lastError == nil {
+	if sl.lastError == errNoError {
 		return
 	}
-	sl.lastError = nil
+	sl.lastError = errNoError
 
 	sl.logger.Log(keyVal...)
 }

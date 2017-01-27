@@ -21,8 +21,8 @@ const defaultHTTPBatchSize = 100
 
 const defaultHTTPMaxBacklog = 1000
 
-// defaultLogErrorInterval
-const defaultLogErrorInterval = time.Second * 60
+// defaultLogErrorInterval, set to by default log every error
+const defaultLogErrorInterval = time.Second * 0
 
 // HTTPCollector implements Collector by forwarding spans to a http server.
 type HTTPCollector struct {

@@ -18,7 +18,7 @@ const (
 	serviceName = "cli"
 
 	// Host + port of our service.
-	hostPort = "127.0.0.1:0"
+	hostPort = "0.0.0.0:0"
 
 	// Endpoint to send Zipkin spans to.
 	zipkinHTTPEndpoint = "http://localhost:9411/api/v1/spans"

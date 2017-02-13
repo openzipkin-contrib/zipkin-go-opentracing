@@ -9,6 +9,7 @@ import (
 	"github.com/opentracing/opentracing-go/log"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	"github.com/opentracing-contrib/perfevents/go"
 )
 
 // Span provides access to the essential details of the span, for use
@@ -34,6 +35,8 @@ type spanImpl struct {
 	// The number of logs dropped because of MaxLogsPerSpan.
 	numDroppedLogs int
 	Endpoint       *zipkincore.Endpoint
+	// perfevent desc (contains information for perf events created)
+	EventDescs []perfevents.PerfEventInfo
 }
 
 var spanPool = &sync.Pool{New: func() interface{} {
@@ -184,6 +187,18 @@ func rotateLogBuffer(buf []opentracing.LogRecord, pos int) {
 }
 
 func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
+	// log and close the perf events firs, if any, since, we don't want
+	// to account for the code to finish up the span.
+	perfevents.EventsRead(s.EventDescs)
+	for _,event := range s.EventDescs {
+		// In case of an error for an event, event.EventName will
+		// contain "" for an event.
+		if event.EventName != "" {
+			s.LogEvent(event.EventName + ": " + perfevents.FormatDataToString(event))
+		}
+	}
+	perfevents.EventsDisableClose(s.EventDescs)
+
 	finishTime := opts.FinishTime
 	if finishTime.IsZero() {
 		finishTime = time.Now()

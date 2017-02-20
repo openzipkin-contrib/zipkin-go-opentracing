@@ -86,6 +86,13 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 			return s
 		}
 	}
+
+	if key == string(ext.PerfEvent) {
+		if v, ok := value.(string); ok {
+			_, _, s.EventDescs = perfevents.InitOpenEventsEnableSelf(v)
+		}
+	}
+
 	if s.trim() {
 		return s
 	}

@@ -8,7 +8,6 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
-	"github.com/opentracing-contrib/perfevents/go"
 )
 
 // ErrInvalidEndpoint will be thrown if hostPort parameter is corrupted or host
@@ -284,15 +283,9 @@ func (t *tracerImpl) startSpanWithOptions(
 	// Tags.
 	tags := opts.Tags
 
-	// Perfevents
-	perfevent := opts.Perfevent
-
 	// Build the new span. This is the only allocation: We'll return this as
 	// an opentracing.Span.
 	sp := t.getSpan()
-
-	// start monitoring for the perf event(s), if any
-	_, _, sp.EventDescs = perfevents.InitOpenEventsEnableSelf(perfevent)
 
 	// Look for a parent in the list of References.
 	//
@@ -384,6 +377,12 @@ func (t *tracerImpl) startSpanInternal(
 	sp.raw.Start = startTime
 	sp.raw.Duration = -1
 	sp.raw.Tags = tags
+	for k,v := range tags {
+		if k == string(ext.PerfEvent) {
+			sp.SetTag(k, v)
+		}
+	}
+
 	if t.options.debugAssertSingleGoroutine {
 		sp.SetTag(debugGoroutineIDTag, curGoroutineID())
 	}

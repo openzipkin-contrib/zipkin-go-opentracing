@@ -3,11 +3,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/opentracing/opentracing-go"
-	"golang.org/x/net/context"
 
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
 	"github.com/openzipkin/zipkin-go-opentracing/examples/cli_with_2_services/svc1"

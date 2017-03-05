@@ -1,6 +1,7 @@
 package zipkintracer
 
 import (
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"sync"
@@ -8,8 +9,6 @@ import (
 	"time"
 
 	"github.com/apache/thrift/lib/go/thrift"
-
-	"fmt"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
 )

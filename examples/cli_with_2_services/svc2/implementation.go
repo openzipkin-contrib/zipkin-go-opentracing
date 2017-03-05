@@ -3,11 +3,11 @@
 package svc2
 
 import (
+	"context"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
-	"golang.org/x/net/context"
 )
 
 // svc2 is our actual service implementation.

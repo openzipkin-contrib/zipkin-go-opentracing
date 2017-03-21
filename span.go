@@ -9,7 +9,6 @@ import (
 	"github.com/opentracing/opentracing-go/log"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
-	"github.com/opentracing-contrib/perfevents/go"
 )
 
 // Span provides access to the essential details of the span, for use
@@ -30,13 +29,12 @@ type Span interface {
 type spanImpl struct {
 	tracer     *tracerImpl
 	event      func(SpanEvent)
+	Observer   SpanObserver
 	sync.Mutex // protects the fields below
 	raw        RawSpan
 	// The number of logs dropped because of MaxLogsPerSpan.
 	numDroppedLogs int
 	Endpoint       *zipkincore.Endpoint
-	// perfevent desc (contains information for perf events created)
-	EventDescs []perfevents.PerfEventInfo
 }
 
 var spanPool = &sync.Pool{New: func() interface{} {
@@ -66,6 +64,9 @@ func (s *spanImpl) reset() {
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
+	if s.Observer != nil {
+		s.Observer.OnSetOperationName(operationName)
+	}
 	s.Lock()
 	defer s.Unlock()
 	s.raw.Operation = operationName
@@ -78,6 +79,10 @@ func (s *spanImpl) trim() bool {
 
 func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 	defer s.onTag(key, value)
+	if s.Observer != nil {
+		s.Observer.OnSetTag(key, value)
+	}
+
 	s.Lock()
 	defer s.Unlock()
 	if key == string(ext.SamplingPriority) {
@@ -86,13 +91,6 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 			return s
 		}
 	}
-
-	if key == string(ext.PerfEvent) {
-		if v, ok := value.(string); ok {
-			_, _, s.EventDescs = perfevents.InitOpenEventsEnableSelf(v)
-		}
-	}
-
 	if s.trim() {
 		return s
 	}
@@ -194,23 +192,15 @@ func rotateLogBuffer(buf []opentracing.LogRecord, pos int) {
 }
 
 func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
-	// log and close the perf events firs, if any, since, we don't want
-	// to account for the code to finish up the span.
-	perfevents.EventsRead(s.EventDescs)
-	for _,event := range s.EventDescs {
-		// In case of an error for an event, event.EventName will
-		// contain "" for an event.
-		if event.EventName != "" {
-			s.LogEvent(event.EventName + ": " + perfevents.FormatDataToString(event))
-		}
-	}
-	perfevents.EventsDisableClose(s.EventDescs)
-
 	finishTime := opts.FinishTime
 	if finishTime.IsZero() {
 		finishTime = time.Now()
 	}
 	duration := finishTime.Sub(s.raw.Start)
+
+	if s.Observer != nil {
+		s.Observer.OnFinish(opts)
+	}
 
 	s.Lock()
 	defer s.Unlock()

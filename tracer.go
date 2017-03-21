@@ -107,6 +107,8 @@ type TracerOptions struct {
 	// Regardless of this setting, the library will propagate and support both
 	// 64 and 128 bit incoming traces from upstream sources.
 	traceID128Bit bool
+
+	observer Observer
 }
 
 // TracerOption allows for functional options.
@@ -228,6 +230,7 @@ func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Trac
 		debugMode:                  false,
 		traceID128Bit:              false,
 		maxLogsPerSpan:             10000,
+		observer:                   nil,
 	}
 	for _, o := range options {
 		err := o(opts)
@@ -286,6 +289,10 @@ func (t *tracerImpl) startSpanWithOptions(
 	// Build the new span. This is the only allocation: We'll return this as
 	// an opentracing.Span.
 	sp := t.getSpan()
+
+	if t.options.observer != nil {
+		sp.Observer = t.options.observer.OnStartSpan(sp, operationName, opts)
+	}
 
 	// Look for a parent in the list of References.
 	//
@@ -377,11 +384,6 @@ func (t *tracerImpl) startSpanInternal(
 	sp.raw.Start = startTime
 	sp.raw.Duration = -1
 	sp.raw.Tags = tags
-	for k,v := range tags {
-		if k == string(ext.PerfEvent) {
-			sp.SetTag(k, v)
-		}
-	}
 
 	if t.options.debugAssertSingleGoroutine {
 		sp.SetTag(debugGoroutineIDTag, curGoroutineID())
@@ -423,4 +425,11 @@ func (t *tracerImpl) Extract(format interface{}, carrier interface{}) (opentraci
 
 func (t *tracerImpl) Options() TracerOptions {
 	return t.options
+}
+
+func WithObserver(observer Observer) TracerOption {
+	return func(opts *TracerOptions) error {
+		opts.observer = observer
+		return nil
+	}
 }

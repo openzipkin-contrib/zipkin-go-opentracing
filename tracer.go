@@ -427,6 +427,7 @@ func (t *tracerImpl) Options() TracerOptions {
 	return t.options
 }
 
+// WithObserver assigns an initialized observer to opts.observer
 func WithObserver(observer Observer) TracerOption {
 	return func(opts *TracerOptions) error {
 		opts.observer = observer

@@ -28,12 +28,10 @@ type HTTPCollector struct {
 	client        *http.Client
 	batchInterval time.Duration
 	batchSize     int
-	maxBacklog    int
 	batch         []*zipkincore.Span
 	spanc         chan *zipkincore.Span
 	quit          chan struct{}
 	shutdown      chan error
-	sendMutex     *sync.Mutex
 	batchMutex    *sync.Mutex
 }
 
@@ -62,7 +60,7 @@ func HTTPBatchSize(n int) HTTPOption {
 // when batch size reaches this threshold, spans from the
 // beginning of the batch will be disposed
 func HTTPMaxBacklog(n int) HTTPOption {
-	return func(c *HTTPCollector) { c.maxBacklog = n }
+	return func(c *HTTPCollector) { c.spanc = make(chan *zipkincore.Span, n) }
 }
 
 // HTTPBatchInterval sets the maximum duration we will buffer traces before
@@ -82,12 +80,10 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 		client:        &http.Client{Timeout: defaultHTTPTimeout},
 		batchInterval: defaultHTTPBatchInterval * time.Second,
 		batchSize:     defaultHTTPBatchSize,
-		maxBacklog:    defaultHTTPMaxBacklog,
 		batch:         []*zipkincore.Span{},
-		spanc:         make(chan *zipkincore.Span),
+		spanc:         make(chan *zipkincore.Span, defaultHTTPMaxBacklog),
 		quit:          make(chan struct{}, 1),
 		shutdown:      make(chan error, 1),
-		sendMutex:     &sync.Mutex{},
 		batchMutex:    &sync.Mutex{},
 	}
 
@@ -101,7 +97,13 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 
 // Collect implements Collector.
 func (c *HTTPCollector) Collect(s *zipkincore.Span) error {
-	c.spanc <- s
+
+	select {
+	case c.spanc <- s:
+	default:
+		c.logger.Log("Backlog too long, disposing spans.")
+	}
+
 	return nil
 }
 
@@ -142,12 +144,12 @@ func (c *HTTPCollector) loop() {
 			currentBatchSize := c.append(span)
 			if currentBatchSize >= c.batchSize {
 				nextSend = time.Now().Add(c.batchInterval)
-				go c.send()
+				c.send()
 			}
 		case <-tickc:
 			if time.Now().After(nextSend) {
 				nextSend = time.Now().Add(c.batchInterval)
-				go c.send()
+				c.send()
 			}
 		case <-c.quit:
 			c.shutdown <- c.send()
@@ -161,19 +163,11 @@ func (c *HTTPCollector) append(span *zipkincore.Span) (newBatchSize int) {
 	defer c.batchMutex.Unlock()
 
 	c.batch = append(c.batch, span)
-	if len(c.batch) > c.maxBacklog {
-		dispose := len(c.batch) - c.maxBacklog
-		c.logger.Log("Backlog too long, disposing spans.", "count", dispose)
-		c.batch = c.batch[dispose:]
-	}
 	newBatchSize = len(c.batch)
 	return
 }
 
 func (c *HTTPCollector) send() error {
-	// in order to prevent sending the same batch twice
-	c.sendMutex.Lock()
-	defer c.sendMutex.Unlock()
 
 	// Select all current spans in the batch to be sent
 	c.batchMutex.Lock()

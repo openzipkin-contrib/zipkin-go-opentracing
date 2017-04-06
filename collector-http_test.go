@@ -42,6 +42,11 @@ func TestHttpCollector(t *testing.T) {
 	if err := c.Collect(span); err != nil {
 		t.Errorf("error during collection: %v", err)
 	}
+
+	// Collection is now using a buffered channel which is non blocking
+	// so we need to wait a tiny bit.
+	<-time.After(300 * time.Millisecond)
+
 	if err := c.Close(); err != nil {
 		t.Fatalf("error during collection: %v", err)
 	}

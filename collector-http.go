@@ -71,6 +71,11 @@ func HTTPBatchInterval(d time.Duration) HTTPOption {
 	return func(c *HTTPCollector) { c.batchInterval = d }
 }
 
+// HTTPClient sets a custom http client to use.
+func HTTPClient(client *http.Client) HTTPOption {
+	return func(c *HTTPCollector) { c.client = client }
+}
+
 // NewHTTPCollector returns a new HTTP-backend Collector. url should be a http
 // url for handle post request. timeout is passed to http client. queueSize control
 // the maximum size of buffer of async queue. The logger is used to log errors,

@@ -35,7 +35,13 @@ type HTTPCollector struct {
 	shutdown      chan error
 	sendMutex     *sync.Mutex
 	batchMutex    *sync.Mutex
+	reqCallback   RequestCallback
 }
+
+// RequestCallback receives the initialized request from the Collector before
+// sending it over the wire. This allows one to plug in additional headers or
+// do other customization.
+type RequestCallback func(*http.Request)
 
 // HTTPOption sets a parameter for the HttpCollector
 type HTTPOption func(c *HTTPCollector)
@@ -74,6 +80,12 @@ func HTTPBatchInterval(d time.Duration) HTTPOption {
 // HTTPClient sets a custom http client to use.
 func HTTPClient(client *http.Client) HTTPOption {
 	return func(c *HTTPCollector) { c.client = client }
+}
+
+// HTTPRequestCallback registers a callback function to adjust the collector
+// *http.Request before it sends the request to Zipkin.
+func HTTPRequestCallback(rc RequestCallback) HTTPOption {
+	return func(c *HTTPCollector) { c.reqCallback = rc }
 }
 
 // NewHTTPCollector returns a new HTTP-backend Collector. url should be a http
@@ -199,6 +211,9 @@ func (c *HTTPCollector) send() error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-thrift")
+	if c.reqCallback != nil {
+		c.reqCallback(req)
+	}
 	if _, err = c.client.Do(req); err != nil {
 		c.logger.Log("err", err.Error())
 		return err

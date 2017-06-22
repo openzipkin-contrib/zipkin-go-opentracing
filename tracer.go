@@ -8,6 +8,7 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 
 	"github.com/openzipkin/zipkin-go-opentracing/flag"
+	otobserver "github.com/opentracing-contrib/go-observer"
 )
 
 // ErrInvalidEndpoint will be thrown if hostPort parameter is corrupted or host
@@ -108,7 +109,7 @@ type TracerOptions struct {
 	// 64 and 128 bit incoming traces from upstream sources.
 	traceID128Bit bool
 
-	observer Observer
+	observer otobserver.Observer
 }
 
 // TracerOption allows for functional options.
@@ -291,7 +292,7 @@ func (t *tracerImpl) startSpanWithOptions(
 	sp := t.getSpan()
 
 	if t.options.observer != nil {
-		sp.Observer = t.options.observer.OnStartSpan(sp, operationName, opts)
+		sp.observer, _ = t.options.observer.OnStartSpan(sp, operationName, opts)
 	}
 
 	// Look for a parent in the list of References.
@@ -428,7 +429,7 @@ func (t *tracerImpl) Options() TracerOptions {
 }
 
 // WithObserver assigns an initialized observer to opts.observer
-func WithObserver(observer Observer) TracerOption {
+func WithObserver(observer otobserver.Observer) TracerOption {
 	return func(opts *TracerOptions) error {
 		opts.observer = observer
 		return nil

@@ -9,6 +9,7 @@ import (
 	"github.com/opentracing/opentracing-go/log"
 
 	"github.com/openzipkin/zipkin-go-opentracing/_thrift/gen-go/zipkincore"
+	otobserver "github.com/opentracing-contrib/go-observer"
 )
 
 // Span provides access to the essential details of the span, for use
@@ -29,7 +30,7 @@ type Span interface {
 type spanImpl struct {
 	tracer     *tracerImpl
 	event      func(SpanEvent)
-	Observer   SpanObserver
+	observer   otobserver.SpanObserver
 	sync.Mutex // protects the fields below
 	raw        RawSpan
 	// The number of logs dropped because of MaxLogsPerSpan.
@@ -64,8 +65,8 @@ func (s *spanImpl) reset() {
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
-	if s.Observer != nil {
-		s.Observer.OnSetOperationName(operationName)
+	if s.observer != nil {
+		s.observer.OnSetOperationName(operationName)
 	}
 	s.Lock()
 	defer s.Unlock()
@@ -79,8 +80,8 @@ func (s *spanImpl) trim() bool {
 
 func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 	defer s.onTag(key, value)
-	if s.Observer != nil {
-		s.Observer.OnSetTag(key, value)
+	if s.observer != nil {
+		s.observer.OnSetTag(key, value)
 	}
 
 	s.Lock()
@@ -198,8 +199,8 @@ func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
 	}
 	duration := finishTime.Sub(s.raw.Start)
 
-	if s.Observer != nil {
-		s.Observer.OnFinish(opts)
+	if s.observer != nil {
+		s.observer.OnFinish(opts)
 	}
 
 	s.Lock()

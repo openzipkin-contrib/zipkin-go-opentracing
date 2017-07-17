@@ -180,7 +180,7 @@ func (c *HTTPCollector) append(span *zipkincore.Span) (newBatchSize int) {
 	c.batch = append(c.batch, span)
 	if len(c.batch) > c.maxBacklog {
 		dispose := len(c.batch) - c.maxBacklog
-		c.logger.Log("Backlog too long, disposing spans.", "count", dispose)
+		c.logger.Log("msg", "backlog too long, disposing spans.", "count", dispose)
 		c.batch = c.batch[dispose:]
 	}
 	newBatchSize = len(c.batch)

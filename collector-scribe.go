@@ -27,8 +27,8 @@ const defaultScribeMaxBacklog = 1000
 type ScribeCollector struct {
 	logger        Logger
 	category      string
-	factory       func() (scribe.Scribe, error)
-	client        scribe.Scribe
+	factory       func() (*scribe.ScribeClient, error)
+	client        *scribe.ScribeClient
 	batchInterval time.Duration
 	batchSize     int
 	maxBacklog    int
@@ -215,8 +215,8 @@ func (c *ScribeCollector) send() error {
 	return nil
 }
 
-func scribeClientFactory(addr string, timeout time.Duration) func() (scribe.Scribe, error) {
-	return func() (scribe.Scribe, error) {
+func scribeClientFactory(addr string, timeout time.Duration) func() (*scribe.ScribeClient, error) {
+	return func() (*scribe.ScribeClient, error) {
 		a, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
 			return nil, err

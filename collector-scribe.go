@@ -1,6 +1,7 @@
 package zipkintracer
 
 import (
+	"context"
 	"encoding/base64"
 	"fmt"
 	"net"
@@ -27,8 +28,8 @@ const defaultScribeMaxBacklog = 1000
 type ScribeCollector struct {
 	logger        Logger
 	category      string
-	factory       func() (*scribe.ScribeClient, error)
-	client        *scribe.ScribeClient
+	factory       func() (scribe.Scribe, error)
+	client        scribe.Scribe
 	batchInterval time.Duration
 	batchSize     int
 	maxBacklog    int
@@ -198,7 +199,7 @@ func (c *ScribeCollector) send() error {
 			return err
 		}
 	}
-	if rc, err := c.client.Log(sendBatch); err != nil {
+	if rc, err := c.client.Log(context.Background(), sendBatch); err != nil {
 		c.client = nil
 		_ = c.logger.Log("err", fmt.Sprintf("during Log: %v", err))
 		return err
@@ -215,8 +216,8 @@ func (c *ScribeCollector) send() error {
 	return nil
 }
 
-func scribeClientFactory(addr string, timeout time.Duration) func() (*scribe.ScribeClient, error) {
-	return func() (*scribe.ScribeClient, error) {
+func scribeClientFactory(addr string, timeout time.Duration) func() (scribe.Scribe, error) {
+	return func() (scribe.Scribe, error) {
 		a, err := net.ResolveTCPAddr("tcp", addr)
 		if err != nil {
 			return nil, err

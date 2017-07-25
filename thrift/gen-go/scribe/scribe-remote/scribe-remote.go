@@ -4,6 +4,7 @@
 package main
 
 import (
+        "context"
         "flag"
         "fmt"
         "math"
@@ -139,7 +140,7 @@ func main() {
     }
     argvalue0 := containerStruct0.Messages
     value0 := argvalue0
-    fmt.Print(client.Log(value0))
+    fmt.Print(client.Log(context.Background(), value0))
     fmt.Print("\n")
     break
   case "":

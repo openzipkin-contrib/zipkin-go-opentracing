@@ -7,4 +7,4 @@ dependencies:
     - go get -u -t -v github.com/openzipkin/zipkin-go-opentracing/...
 test:
   override:
-    - make all
+    - make test bench

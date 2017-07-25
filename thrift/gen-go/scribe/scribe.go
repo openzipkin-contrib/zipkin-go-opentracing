@@ -234,7 +234,7 @@ func NewScribeClientProtocol(t thrift.TTransport, iprot thrift.TProtocol, oprot 
 
 // Parameters:
 //  - Messages
-func (p *ScribeClient) Log(messages []*LogEntry) (r ResultCode, err error) {
+func (p *ScribeClient) Log(ctx context.Context, messages []*LogEntry) (r ResultCode, err error) {
   if err = p.sendLog(messages); err != nil { return }
   return p.recvLog()
 }

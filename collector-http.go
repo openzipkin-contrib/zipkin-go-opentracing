@@ -28,7 +28,6 @@ type HTTPCollector struct {
 	batchInterval time.Duration
 	batchSize     int
 	maxBacklog    int
-	batch         []*zipkincore.Span
 	spanc         chan *zipkincore.Span
 	quit          chan struct{}
 	shutdown      chan error

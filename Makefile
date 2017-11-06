@@ -18,7 +18,7 @@ lint:
 
 .PHONY: vet
 vet:
-	go vet ./...
+	@go vet $(go list ./... | grep -v /vendor/)
 
 .PHONY: all
 all: vet lint test bench

@@ -1,0 +1,14 @@
+{
+	"ImportPath": "github.com/openzipkin/zipkin-go-opentracing",
+	"GoVersion": "go1.8",
+	"GodepVersion": "v79",
+	"Packages": [
+		"github.com/apache/thrift/lib/go/thrift"
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/apache/thrift/lib/go/thrift",
+			"Rev": "847ecf3c1de8b297d6a29305b9f7871fcf609c36"
+		}
+	]
+}

@@ -12,13 +12,13 @@ bench:
 .PHONY: lint
 lint:
 	# Ignore grep's exit code since no match returns 1.
-	-golint ./... | grep --invert-match -E '^.*\.pb\.go|^thrift'
+	-golint ./... | grep --invert-match -E '^.*\.pb\.go|^thrift|^vendor'
 	@
-	@! (golint ./... | grep --invert-match -E '^.*\.pb\.go|^thrift' | read dummy)
+	@! (golint ./... | grep --invert-match -E '^.*\.pb\.go|^thrift|^vendor' | read dummy)
 
 .PHONY: vet
 vet:
-	go vet ./...
+	@go vet $(go list ./... | grep -v /vendor/)
 
 .PHONY: all
 all: vet lint test bench

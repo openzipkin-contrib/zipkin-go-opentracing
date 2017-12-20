@@ -47,7 +47,11 @@ func (p *textMapPropagator) Inject(
 	}
 	carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
 	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.SpanID, 16))
-	carrier.Set(zipkinSampled, strconv.FormatBool(sc.Sampled))
+	if sc.Sampled {
+		carrier.Set(zipkinSampled, "1")
+	} else {
+		carrier.Set(zipkinSampled, "0")
+	}
 
 	if sc.ParentSpanID != nil {
 		// we only set ParentSpanID header if there is a parent span

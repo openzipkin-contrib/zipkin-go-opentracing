@@ -24,7 +24,7 @@ const defaultHTTPMaxBacklog = 1000
 // HTTPCollector implements Collector by forwarding spans to a http server.
 type HTTPCollector struct {
 	logger        Logger
-	url           string
+	endpointURL   string
 	client        *http.Client
 	batchInterval time.Duration
 	batchSize     int
@@ -88,14 +88,15 @@ func HTTPRequestCallback(rc RequestCallback) HTTPOption {
 	return func(c *HTTPCollector) { c.reqCallback = rc }
 }
 
-// NewHTTPCollector returns a new HTTP-backend Collector. url should be a http
-// url for handle post request. timeout is passed to http client. queueSize control
+// NewHTTPCollector returns a new HTTP-backend Collector. endpointURL should be a http
+// endpointURL for handle post request. timeout is passed to http client. queueSize control
 // the maximum size of buffer of async queue. The logger is used to log errors,
-// such as send failures;
-func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
+// such as send failures; endpointURL should be the the endpoint to send the spans to, e.g.
+// http://localhost:9411/api/v1/spans
+func NewHTTPCollector(endpointURL string, options ...HTTPOption) (Collector, error) {
 	c := &HTTPCollector{
 		logger:        NewNopLogger(),
-		url:           url,
+		endpointURL:   endpointURL,
 		client:        &http.Client{Timeout: defaultHTTPTimeout},
 		batchInterval: defaultHTTPBatchInterval * time.Second,
 		batchSize:     defaultHTTPBatchSize,
@@ -204,7 +205,7 @@ func (c *HTTPCollector) send() error {
 
 	req, err := http.NewRequest(
 		"POST",
-		c.url,
+		c.endpointURL,
 		httpSerialize(sendBatch))
 	if err != nil {
 		c.logger.Log("err", err.Error())

@@ -2,6 +2,7 @@ package zipkintracer
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -46,7 +47,7 @@ func (p *textMapPropagator) Inject(
 		return opentracing.ErrInvalidCarrier
 	}
 	carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
-	carrier.Set(zipkinSpanID, strconv.FormatUint(sc.SpanID, 16))
+	carrier.Set(zipkinSpanID, fmt.Sprintf("%016x", sc.SpanID))
 	if sc.Sampled {
 		carrier.Set(zipkinSampled, "1")
 	} else {
@@ -55,7 +56,7 @@ func (p *textMapPropagator) Inject(
 
 	if sc.ParentSpanID != nil {
 		// we only set ParentSpanID header if there is a parent span
-		carrier.Set(zipkinParentSpanID, strconv.FormatUint(*sc.ParentSpanID, 16))
+		carrier.Set(zipkinParentSpanID, fmt.Sprintf("%016x", *sc.ParentSpanID))
 	}
 	// we only need to inject the debug flag if set. see flag package for details.
 	flags := sc.Flags & flag.Debug

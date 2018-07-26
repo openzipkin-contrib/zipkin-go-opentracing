@@ -9,7 +9,7 @@ import (
 	"github.com/opentracing/opentracing-go/log"
 
 	otobserver "github.com/opentracing-contrib/go-observer"
-	"github.com/openzipkin/zipkin-go-opentracing/thrift/gen-go/zipkincore"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
 )
 
 // Span provides access to the essential details of the span, for use

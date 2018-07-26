@@ -10,9 +10,9 @@ import (
 	"github.com/gogo/protobuf/proto"
 	opentracing "github.com/opentracing/opentracing-go"
 
-	"github.com/openzipkin/zipkin-go-opentracing/flag"
-	"github.com/openzipkin/zipkin-go-opentracing/types"
-	"github.com/openzipkin/zipkin-go-opentracing/wire"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/flag"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/types"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/wire"
 )
 
 type textMapPropagator struct {

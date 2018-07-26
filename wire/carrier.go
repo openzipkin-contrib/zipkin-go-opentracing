@@ -1,8 +1,8 @@
 package wire
 
 import (
-	"github.com/openzipkin/zipkin-go-opentracing/flag"
-	"github.com/openzipkin/zipkin-go-opentracing/types"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/flag"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/types"
 )
 
 // ProtobufCarrier is a DelegatingCarrier that uses protocol buffers as the

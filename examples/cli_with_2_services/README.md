@@ -2,7 +2,7 @@
 
 This directory contains a super simple command line client and two HTTP services
 which are instrumented using the OpenTracing API using the
-[zipkin-go-opentracing](https://github.com/openzipkin/zipkin-go-opentracing)
+[zipkin-go-opentracing](https://github.com/openzipkin-contrib/zipkin-go-opentracing)
 tracer.
 
 The code is a quick hack to solely demonstrate the usage of

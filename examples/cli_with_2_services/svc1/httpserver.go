@@ -9,7 +9,7 @@ import (
 
 	opentracing "github.com/opentracing/opentracing-go"
 
-	"github.com/openzipkin/zipkin-go-opentracing/examples/middleware"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing/examples/middleware"
 )
 
 type httpService struct {

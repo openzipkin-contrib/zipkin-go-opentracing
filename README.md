@@ -1,10 +1,10 @@
 # zipkin-go-opentracing
 
-[![Travis CI](https://travis-ci.org/openzipkin/zipkin-go-opentracing.svg?branch=master)](https://travis-ci.org/openzipkin/zipkin-go-opentracing)
-[![CircleCI](https://circleci.com/gh/openzipkin/zipkin-go-opentracing.svg?style=shield)](https://circleci.com/gh/openzipkin/zipkin-go-opentracing)
-[![GoDoc](https://godoc.org/github.com/openzipkin/zipkin-go-opentracing?status.svg)](https://godoc.org/github.com/openzipkin/zipkin-go-opentracing)
-[![Go Report Card](https://goreportcard.com/badge/github.com/openzipkin/zipkin-go-opentracing)](https://goreportcard.com/report/github.com/openzipkin/zipkin-go-opentracing)
-[![Sourcegraph](https://sourcegraph.com/github.com/openzipkin/zipkin-go-opentracing/-/badge.svg)](https://sourcegraph.com/github.com/openzipkin/zipkin-go-opentracing?badge)
+[![Travis CI](https://travis-ci.org/openzipkin-contrib/zipkin-go-opentracing.svg?branch=master)](https://travis-ci.org/openzipkin-contrib/zipkin-go-opentracing)
+[![CircleCI](https://circleci.com/gh/openzipkin-contrib/zipkin-go-opentracing.svg?style=shield)](https://circleci.com/gh/openzipkin-contrib/zipkin-go-opentracing)
+[![GoDoc](https://godoc.org/github.com/openzipkin-contrib/zipkin-go-opentracing?status.svg)](https://godoc.org/github.com/openzipkin-contrib/zipkin-go-opentracing)
+[![Go Report Card](https://goreportcard.com/badge/github.com/openzipkin-contrib/zipkin-go-opentracing)](https://goreportcard.com/report/github.com/openzipkin-contrib/zipkin-go-opentracing)
+[![Sourcegraph](https://sourcegraph.com/github.com/openzipkin-contrib/zipkin-go-opentracing/-/badge.svg)](https://sourcegraph.com/github.com/openzipkin-contrib/zipkin-go-opentracing?badge)
 
 [OpenTracing](http://opentracing.io) Tracer implementation for [Zipkin](http://zipkin.io) in Go.
 
@@ -24,6 +24,6 @@ business logic.
 ### Examples
 
 For more information on zipkin-go-opentracing, please see the
-[examples](https://github.com/openzipkin/zipkin-go-opentracing/tree/master/examples)
+[examples](https://github.com/openzipkin-contrib/zipkin-go-opentracing/tree/master/examples)
 directory for usage examples as well as documentation at
-[go doc](https://godoc.org/github.com/openzipkin/zipkin-go-opentracing).
+[go doc](https://godoc.org/github.com/openzipkin-contrib/zipkin-go-opentracing).

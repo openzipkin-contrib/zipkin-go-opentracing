@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/net/trace"
 
-	"github.com/openzipkin/zipkin-go-opentracing"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing"
 )
 
 // NetTraceIntegrator can be passed into a zipkintracer as NewSpanEventListener

@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 
@@ -48,10 +49,12 @@ func (p *textMapPropagator) Inject(
 	}
 	carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
 	carrier.Set(zipkinSpanID, fmt.Sprintf("%016x", sc.SpanID))
-	if sc.Sampled {
-		carrier.Set(zipkinSampled, "1")
-	} else {
-		carrier.Set(zipkinSampled, "0")
+	if os.Getenv("SKIP_SAMPLED") != "1" {
+		if sc.Sampled {
+			carrier.Set(zipkinSampled, "1")
+		} else {
+			carrier.Set(zipkinSampled, "0")
+		}
 	}
 
 	if sc.ParentSpanID != nil {
@@ -59,8 +62,10 @@ func (p *textMapPropagator) Inject(
 		carrier.Set(zipkinParentSpanID, fmt.Sprintf("%016x", *sc.ParentSpanID))
 	}
 	// we only need to inject the debug flag if set. see flag package for details.
-	flags := sc.Flags & flag.Debug
-	carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
+	if os.Getenv("SKIP_FLAGS") != "1" {
+		flags := sc.Flags & flag.Debug
+		carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
+	}
 
 	for k, v := range sc.Baggage {
 		carrier.Set(prefixBaggage+k, v)

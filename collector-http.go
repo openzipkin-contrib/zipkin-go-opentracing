@@ -118,7 +118,12 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 
 // Collect implements Collector.
 func (c *HTTPCollector) Collect(s *zipkincore.Span) error {
-	c.spanc <- s
+	select {
+	case c.spanc <- s:
+		// Accepted.
+	case <-c.quit:
+		// Collector concurrently closed.
+	}
 	return nil
 }
 

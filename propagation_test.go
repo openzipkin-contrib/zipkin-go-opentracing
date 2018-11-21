@@ -2,6 +2,8 @@ package zipkintracer_test
 
 import (
 	"bytes"
+	"fmt"
+	"math/rand"
 	"net/http"
 	"reflect"
 	"testing"
@@ -122,6 +124,122 @@ func TestSpanPropagator(t *testing.T) {
 		}
 		if !reflect.DeepEqual(exp, sp) {
 			t.Fatalf("%d: wanted %+v, got %+v", i, spew.Sdump(exp), spew.Sdump(sp))
+		}
+	}
+}
+
+func TestTextMapPropagator_Extract(t *testing.T) {
+	tracer, err := zipkintracer.NewTracer(
+		zipkintracer.NewInMemoryRecorder(),
+	)
+	if err != nil {
+		t.Fatalf("Unable to create Tracer: %+v", err)
+	}
+
+	traceIDUintVal := rand.Uint64()
+	traceIDHex := fmt.Sprintf("%016x", traceIDUintVal)
+	traceID := types.TraceID{
+		Low: traceIDUintVal,
+	}
+
+	for i, tc := range []struct {
+		headerVals map[string]string
+		want       zipkintracer.SpanContext
+	}{
+		{
+			headerVals: map[string]string{
+				"X-B3-TraceId": traceIDHex,
+				"X-B3-SpanId":  traceIDHex,
+			},
+			want: zipkintracer.SpanContext{
+				TraceID: traceID,
+				SpanID:  traceIDUintVal,
+				Baggage: map[string]string{},
+			},
+		},
+		{
+			headerVals: map[string]string{
+				"X-B3-TraceId": traceIDHex,
+				"X-B3-SpanId":  traceIDHex,
+				"X-B3-Sampled": "1",
+			},
+			want: zipkintracer.SpanContext{
+				TraceID: traceID,
+				SpanID:  traceIDUintVal,
+				Baggage: map[string]string{},
+				Sampled: true,
+				Flags:   flag.SamplingSet,
+			},
+		},
+	} {
+		header := http.Header{}
+		for k, v := range tc.headerVals {
+			header.Set(k, v)
+		}
+
+		headersCarrier := opentracing.HTTPHeadersCarrier(header)
+		spanCtx, err := tracer.Extract(opentracing.HTTPHeaders, headersCarrier)
+		if err != nil {
+			t.Fatalf("%d: error extracting span context from header: %v", i, err)
+		}
+
+		got, ok := spanCtx.(zipkintracer.SpanContext)
+		if !ok {
+			t.Fatalf("%d: extracted span context was not a zipkintracer.SpanContext", i)
+		}
+
+		if !reflect.DeepEqual(tc.want, got) {
+			t.Fatalf("%d: wanted extracted values %#v, got %#v", i, tc.want, got)
+		}
+	}
+}
+
+func TestTextMapPropagator_Extract_Fail(t *testing.T) {
+	tracer, err := zipkintracer.NewTracer(
+		zipkintracer.NewInMemoryRecorder(),
+	)
+	if err != nil {
+		t.Fatalf("Unable to create Tracer: %+v", err)
+	}
+
+	traceIDUintVal := rand.Uint64()
+	traceIDHex := fmt.Sprintf("%016x", traceIDUintVal)
+
+	for i, tc := range []struct {
+		headerVals map[string]string
+		wantError  error
+	}{
+		// no required IDs are present
+		{
+			headerVals: map[string]string{},
+			wantError:  opentracing.ErrSpanContextNotFound,
+		},
+		// required ID is missing
+		{
+			headerVals: map[string]string{
+				"X-B3-TraceId": traceIDHex,
+			},
+			wantError: opentracing.ErrSpanContextCorrupted,
+		},
+		// total number of IDs is >= 2, but is missing a required ID
+		{
+			headerVals: map[string]string{
+				"X-B3-TraceId": traceIDHex,
+				"X-B3-Sampled": "1",
+				"X-B3-Flags":   "0",
+			},
+			wantError: opentracing.ErrSpanContextCorrupted,
+		},
+	} {
+		header := http.Header{}
+		for k, v := range tc.headerVals {
+			header.Set(k, v)
+		}
+
+		headersCarrier := opentracing.HTTPHeadersCarrier(header)
+		_, err := tracer.Extract(opentracing.HTTPHeaders, headersCarrier)
+		if err != tc.wantError {
+			t.Fatalf("%d: expected extraction to have error %v, got %v", i, tc.wantError, err)
 		}
 	}
 }

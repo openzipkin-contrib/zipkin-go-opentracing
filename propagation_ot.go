@@ -26,12 +26,11 @@ const (
 	prefixTracerState = "x-b3-" // we default to interop with non-opentracing zipkin tracers
 	prefixBaggage     = "ot-baggage-"
 
-	tracerStateFieldCount = 3 // not 5, X-B3-ParentSpanId is optional and we allow optional Sampled header
-	zipkinTraceID         = prefixTracerState + "traceid"
-	zipkinSpanID          = prefixTracerState + "spanid"
-	zipkinParentSpanID    = prefixTracerState + "parentspanid"
-	zipkinSampled         = prefixTracerState + "sampled"
-	zipkinFlags           = prefixTracerState + "flags"
+	zipkinTraceID      = prefixTracerState + "traceid"
+	zipkinSpanID       = prefixTracerState + "spanid"
+	zipkinParentSpanID = prefixTracerState + "parentspanid"
+	zipkinSampled      = prefixTracerState + "sampled"
+	zipkinFlags        = prefixTracerState + "flags"
 )
 
 func (p *textMapPropagator) Inject(
@@ -75,7 +74,6 @@ func (p *textMapPropagator) Extract(
 	if !ok {
 		return nil, opentracing.ErrInvalidCarrier
 	}
-	requiredFieldCount := 0
 	var (
 		traceID      types.TraceID
 		spanID       uint64
@@ -85,6 +83,8 @@ func (p *textMapPropagator) Extract(
 		err          error
 	)
 	decodedBaggage := make(map[string]string)
+
+	var traceIDFound, spanIDFound bool
 	err = carrier.ForeachKey(func(k, v string) error {
 		switch strings.ToLower(k) {
 		case zipkinTraceID:
@@ -92,11 +92,15 @@ func (p *textMapPropagator) Extract(
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
+			// mark TraceID as found
+			traceIDFound = true
 		case zipkinSpanID:
 			spanID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
+			// mark SpanID as found
+			spanIDFound = true
 		case zipkinParentSpanID:
 			var id uint64
 			id, err = strconv.ParseUint(v, 16, 64)
@@ -125,17 +129,14 @@ func (p *textMapPropagator) Extract(
 			if strings.HasPrefix(lowercaseK, prefixBaggage) {
 				decodedBaggage[strings.TrimPrefix(lowercaseK, prefixBaggage)] = v
 			}
-			// Balance off the requiredFieldCount++ just below...
-			requiredFieldCount--
 		}
-		requiredFieldCount++
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if requiredFieldCount < tracerStateFieldCount {
-		if requiredFieldCount == 0 {
+	if !traceIDFound || !spanIDFound {
+		if !traceIDFound && !spanIDFound {
 			return nil, opentracing.ErrSpanContextNotFound
 		}
 		return nil, opentracing.ErrSpanContextCorrupted

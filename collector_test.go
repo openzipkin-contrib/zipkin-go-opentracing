@@ -76,6 +76,24 @@ func TestMultiCollector(t *testing.T) {
 	}
 }
 
+func TestMultiCollectorNoError(t *testing.T) {
+	cs := MultiCollector{
+		&stubCollector{},
+		&stubCollector{},
+		&stubCollector{},
+	}
+	err := cs.Collect(s)
+	if err != nil {
+		t.Fatal("wanted no error, got error")
+	}
+
+	for _, c := range cs {
+		if !c.(*stubCollector).collected {
+			t.Error("collect not called")
+		}
+	}
+}
+
 func TestMultiCollectorClose(t *testing.T) {
 	cs := MultiCollector{
 		&stubCollector{errid: 1},

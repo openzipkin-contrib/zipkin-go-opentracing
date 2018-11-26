@@ -1,12 +1,12 @@
 language: go
 
 go:
-  - 1.8
-  - 1.9
-  - tip
+  - "1.9"
+  - "1.10"
+  - "tip"
 
 install:
   - go get -d -t ./...
-  - go get -u github.com/golang/lint/...
+  - go get -u golang.org/x/lint/...
 script:
   - make test vet lint bench

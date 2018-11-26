@@ -128,6 +128,84 @@ func TestSpanPropagator(t *testing.T) {
 	}
 }
 
+func TestTextMapPropagator_Inject(t *testing.T) {
+	tracer, err := zipkintracer.NewTracer(
+		zipkintracer.NewInMemoryRecorder(),
+	)
+	if err != nil {
+		t.Fatalf("Unable to create Tracer: %+v", err)
+	}
+
+	traceIDUintVal := rand.Uint64()
+	traceIDHex := fmt.Sprintf("%016x", traceIDUintVal)
+	traceID := types.TraceID{
+		Low: traceIDUintVal,
+	}
+
+	for i, tc := range []struct {
+		spanCtx zipkintracer.SpanContext
+		want    http.Header
+	}{
+		// no required IDs are present
+		{
+			spanCtx: zipkintracer.SpanContext{},
+			want: map[string][]string{
+				"X-B3-Sampled": {"0"},
+				"X-B3-Flags":   {"0"},
+			},
+		},
+		// if no required IDs are present, other fields are still injected
+		{
+			spanCtx: zipkintracer.SpanContext{
+				Sampled: true,
+				Flags:   flag.SamplingSet,
+			},
+			want: map[string][]string{
+				"X-B3-Sampled": {"1"},
+				"X-B3-Flags":   {"0"},
+			},
+		},
+		{
+			spanCtx: zipkintracer.SpanContext{
+				TraceID: traceID,
+				SpanID:  traceIDUintVal,
+			},
+			want: map[string][]string{
+				"X-B3-Traceid": {traceIDHex},
+				"X-B3-Spanid":  {traceIDHex},
+				"X-B3-Sampled": {"0"},
+				"X-B3-Flags":   {"0"},
+			},
+		},
+		{
+			spanCtx: zipkintracer.SpanContext{
+				TraceID: traceID,
+				SpanID:  traceIDUintVal,
+				Sampled: true,
+				Flags:   flag.SamplingSet,
+			},
+			want: map[string][]string{
+				"X-B3-Traceid": {traceIDHex},
+				"X-B3-Spanid":  {traceIDHex},
+				"X-B3-Sampled": {"1"},
+				"X-B3-Flags":   {"0"},
+			},
+		},
+	} {
+		header := http.Header{}
+		headersCarrier := opentracing.HTTPHeadersCarrier(header)
+
+		err := tracer.Inject(tc.spanCtx, opentracing.HTTPHeaders, headersCarrier)
+		if err != nil {
+			t.Fatalf("%d: error injecting span context %v into header: %v", i, tc.spanCtx, err)
+		}
+
+		if !reflect.DeepEqual(tc.want, header) {
+			t.Fatalf("%d: wanted extracted values %#v, got %#v", i, tc.want, header)
+		}
+	}
+}
+
 func TestTextMapPropagator_Extract(t *testing.T) {
 	tracer, err := zipkintracer.NewTracer(
 		zipkintracer.NewInMemoryRecorder(),
@@ -146,6 +224,24 @@ func TestTextMapPropagator_Extract(t *testing.T) {
 		headerVals map[string]string
 		want       zipkintracer.SpanContext
 	}{
+		// no required IDs are present
+		{
+			headerVals: map[string]string{},
+			want: zipkintracer.SpanContext{
+				Baggage: map[string]string{},
+			},
+		},
+		// if no required IDs are present, other fields are still extracted
+		{
+			headerVals: map[string]string{
+				"X-B3-Sampled": "1",
+			},
+			want: zipkintracer.SpanContext{
+				Baggage: map[string]string{},
+				Sampled: true,
+				Flags:   flag.SamplingSet,
+			},
+		},
 		{
 			headerVals: map[string]string{
 				"X-B3-TraceId": traceIDHex,
@@ -209,12 +305,7 @@ func TestTextMapPropagator_Extract_Fail(t *testing.T) {
 		headerVals map[string]string
 		wantError  error
 	}{
-		// no required IDs are present
-		{
-			headerVals: map[string]string{},
-			wantError:  opentracing.ErrSpanContextNotFound,
-		},
-		// required ID is missing
+		// only 1 required ID is present
 		{
 			headerVals: map[string]string{
 				"X-B3-TraceId": traceIDHex,

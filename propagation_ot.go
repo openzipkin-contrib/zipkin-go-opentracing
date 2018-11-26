@@ -45,18 +45,23 @@ func (p *textMapPropagator) Inject(
 	if !ok {
 		return opentracing.ErrInvalidCarrier
 	}
-	carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
-	carrier.Set(zipkinSpanID, fmt.Sprintf("%016x", sc.SpanID))
+
+	// only inject IDs if both trace ID and span ID are present
+	if !sc.TraceID.Empty() && sc.SpanID > 0 {
+		carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
+		carrier.Set(zipkinSpanID, fmt.Sprintf("%016x", sc.SpanID))
+		if sc.ParentSpanID != nil {
+			// we only set ParentSpanID header if there is a parent span
+			carrier.Set(zipkinParentSpanID, fmt.Sprintf("%016x", *sc.ParentSpanID))
+		}
+	}
+
 	if sc.Sampled {
 		carrier.Set(zipkinSampled, "1")
 	} else {
 		carrier.Set(zipkinSampled, "0")
 	}
 
-	if sc.ParentSpanID != nil {
-		// we only set ParentSpanID header if there is a parent span
-		carrier.Set(zipkinParentSpanID, fmt.Sprintf("%016x", *sc.ParentSpanID))
-	}
 	// we only need to inject the debug flag if set. see flag package for details.
 	flags := sc.Flags & flag.Debug
 	carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
@@ -74,6 +79,7 @@ func (p *textMapPropagator) Extract(
 	if !ok {
 		return nil, opentracing.ErrInvalidCarrier
 	}
+	requiredFieldCount := 0
 	var (
 		traceID      types.TraceID
 		spanID       uint64
@@ -93,14 +99,20 @@ func (p *textMapPropagator) Extract(
 				return opentracing.ErrSpanContextCorrupted
 			}
 			// mark TraceID as found
-			traceIDFound = true
+			if !traceIDFound {
+				requiredFieldCount++
+				traceIDFound = true
+			}
 		case zipkinSpanID:
 			spanID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
 			// mark SpanID as found
-			spanIDFound = true
+			if !spanIDFound {
+				requiredFieldCount++
+				spanIDFound = true
+			}
 		case zipkinParentSpanID:
 			var id uint64
 			id, err = strconv.ParseUint(v, 16, 64)
@@ -135,10 +147,9 @@ func (p *textMapPropagator) Extract(
 	if err != nil {
 		return nil, err
 	}
-	if !traceIDFound || !spanIDFound {
-		if !traceIDFound && !spanIDFound {
-			return nil, opentracing.ErrSpanContextNotFound
-		}
+
+	// required fields must both be present or neither be present
+	if requiredFieldCount != 0 && requiredFieldCount != 2 {
 		return nil, opentracing.ErrSpanContextCorrupted
 	}
 

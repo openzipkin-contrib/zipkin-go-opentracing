@@ -116,6 +116,9 @@ func NewHTTPCollector(url string, options ...HTTPOption) (Collector, error) {
 func (c *HTTPCollector) Collect(s *zipkincore.Span) error {
 	select {
 	case c.spanc <- s:
+		// Accepted.
+	case <-c.quit:
+		// Collector concurrently closed.
 	default:
 		c.logger.Log("msg", "queue full, disposing spans.", "size", len(c.spanc))
 	}

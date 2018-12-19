@@ -113,8 +113,13 @@ func NewScribeCollector(addr string, timeout time.Duration, options ...ScribeOpt
 
 // Collect implements Collector.
 func (c *ScribeCollector) Collect(s *zipkincore.Span) error {
-	c.spanc <- s
-	return nil // accepted
+	select {
+	case c.spanc <- s:
+		// Accepted.
+	case <-c.quit:
+		// Collector concurrently closed.
+	}
+	return nil
 }
 
 // Close implements Collector.

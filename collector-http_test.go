@@ -24,7 +24,8 @@ func TestHttpCollector(t *testing.T) {
 
 	port := 10000
 	server := newHTTPServer(t, port)
-	c, err := NewHTTPCollector(fmt.Sprintf("http://localhost:%d/api/v1/spans", port))
+	c, err := NewHTTPCollector(fmt.Sprintf("http://localhost:%d/api/v1/spans", port),
+		HTTPBatchSize(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,11 +44,9 @@ func TestHttpCollector(t *testing.T) {
 	if err := c.Collect(span); err != nil {
 		t.Errorf("error during collection: %v", err)
 	}
-	if err := c.Close(); err != nil {
-		t.Fatalf("error during collection: %v", err)
-	}
-	if want, have := 1, len(server.spans()); want != have {
-		t.Fatal("never received a span")
+
+	if err = eventually(func() bool { return len(server.spans()) == 1 }, 1*time.Second); err != nil {
+		t.Fatalf("never received a span %v", server.spans())
 	}
 
 	gotSpan := server.spans()[0]
@@ -73,6 +72,9 @@ func TestHttpCollector(t *testing.T) {
 		t.Errorf("want %q, have %q", want, have)
 	}
 
+	if err := c.Close(); err != nil {
+		t.Fatalf("error during collection: %v", err)
+	}
 }
 
 func TestHttpCollector_Batch(t *testing.T) {
@@ -156,6 +158,8 @@ func TestHttpCollector_BatchInterval(t *testing.T) {
 	if err != nil {
 		t.Fatal("Client did not send spans after timeout")
 	}
+
+	c.Close()
 }
 
 // TestHttpCollector_NonBlockCollect tests that the Collect
@@ -181,6 +185,7 @@ func TestHttpCollector_NonBlockCollect(t *testing.T) {
 		t.Fatal("Collect is blocking")
 	}
 
+	c.Close()
 }
 
 func TestHttpCollector_MaxBatchSize(t *testing.T) {
@@ -205,14 +210,15 @@ func TestHttpCollector_MaxBatchSize(t *testing.T) {
 	for i := 0; i < batchSize; i++ {
 		c.Collect(makeNewSpan("", "", "", 0, int64(i), 0, false))
 	}
-	c.Close()
 
+	// new spans are discarded.
 	for i, s := range server.spans() {
-		if want, have := int64(i+maxBacklog), s.ID; want != have {
+		if want, have := int64(i), s.ID; want != have {
 			t.Errorf("Span ID is wrong. want %d, have %d", want, have)
 		}
 	}
 
+	c.Close()
 }
 
 func TestHTTPCollector_RequestCallback(t *testing.T) {
@@ -231,6 +237,7 @@ func TestHTTPCollector_RequestCallback(t *testing.T) {
 		HTTPRequestCallback(func(r *http.Request) {
 			r.Header.Add(hdrKey, hdrValue)
 		}),
+		HTTPBatchSize(1),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -238,12 +245,16 @@ func TestHTTPCollector_RequestCallback(t *testing.T) {
 	if err = c.Collect(&zipkincore.Span{}); err != nil {
 		t.Fatal(err)
 	}
-	if err = c.Close(); err != nil {
-		t.Fatal(err)
+
+	if err = eventually(func() bool {
+		return 1 == len(server.spans())
+	}, 1*time.Second); err != nil {
+		t.Fatal("never received a span")
 	}
 
-	if want, have := 1, len(server.spans()); want != have {
-		t.Fatal("never received a span")
+	// close collector after verification.
+	if err = c.Close(); err != nil {
+		t.Fatal(err)
 	}
 
 	headers := server.headers()

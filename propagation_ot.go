@@ -26,12 +26,11 @@ const (
 	prefixTracerState = "x-b3-" // we default to interop with non-opentracing zipkin tracers
 	prefixBaggage     = "ot-baggage-"
 
-	tracerStateFieldCount = 3 // not 5, X-B3-ParentSpanId is optional and we allow optional Sampled header
-	zipkinTraceID         = prefixTracerState + "traceid"
-	zipkinSpanID          = prefixTracerState + "spanid"
-	zipkinParentSpanID    = prefixTracerState + "parentspanid"
-	zipkinSampled         = prefixTracerState + "sampled"
-	zipkinFlags           = prefixTracerState + "flags"
+	zipkinTraceID      = prefixTracerState + "traceid"
+	zipkinSpanID       = prefixTracerState + "spanid"
+	zipkinParentSpanID = prefixTracerState + "parentspanid"
+	zipkinSampled      = prefixTracerState + "sampled"
+	zipkinFlags        = prefixTracerState + "flags"
 )
 
 func (p *textMapPropagator) Inject(
@@ -46,18 +45,23 @@ func (p *textMapPropagator) Inject(
 	if !ok {
 		return opentracing.ErrInvalidCarrier
 	}
-	carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
-	carrier.Set(zipkinSpanID, fmt.Sprintf("%016x", sc.SpanID))
+
+	// only inject IDs if both trace ID and span ID are present
+	if !sc.TraceID.Empty() && sc.SpanID > 0 {
+		carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
+		carrier.Set(zipkinSpanID, fmt.Sprintf("%016x", sc.SpanID))
+		if sc.ParentSpanID != nil {
+			// we only set ParentSpanID header if there is a parent span
+			carrier.Set(zipkinParentSpanID, fmt.Sprintf("%016x", *sc.ParentSpanID))
+		}
+	}
+
 	if sc.Sampled {
 		carrier.Set(zipkinSampled, "1")
 	} else {
 		carrier.Set(zipkinSampled, "0")
 	}
 
-	if sc.ParentSpanID != nil {
-		// we only set ParentSpanID header if there is a parent span
-		carrier.Set(zipkinParentSpanID, fmt.Sprintf("%016x", *sc.ParentSpanID))
-	}
 	// we only need to inject the debug flag if set. see flag package for details.
 	flags := sc.Flags & flag.Debug
 	carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
@@ -85,6 +89,8 @@ func (p *textMapPropagator) Extract(
 		err          error
 	)
 	decodedBaggage := make(map[string]string)
+
+	var traceIDFound, spanIDFound bool
 	err = carrier.ForeachKey(func(k, v string) error {
 		switch strings.ToLower(k) {
 		case zipkinTraceID:
@@ -92,10 +98,20 @@ func (p *textMapPropagator) Extract(
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
+			// mark TraceID as found
+			if !traceIDFound {
+				requiredFieldCount++
+				traceIDFound = true
+			}
 		case zipkinSpanID:
 			spanID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
+			}
+			// mark SpanID as found
+			if !spanIDFound {
+				requiredFieldCount++
+				spanIDFound = true
 			}
 		case zipkinParentSpanID:
 			var id uint64
@@ -125,19 +141,15 @@ func (p *textMapPropagator) Extract(
 			if strings.HasPrefix(lowercaseK, prefixBaggage) {
 				decodedBaggage[strings.TrimPrefix(lowercaseK, prefixBaggage)] = v
 			}
-			// Balance off the requiredFieldCount++ just below...
-			requiredFieldCount--
 		}
-		requiredFieldCount++
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if requiredFieldCount < tracerStateFieldCount {
-		if requiredFieldCount == 0 {
-			return nil, opentracing.ErrSpanContextNotFound
-		}
+
+	// required fields must both be present or neither be present
+	if requiredFieldCount != 0 && requiredFieldCount != 2 {
 		return nil, opentracing.ErrSpanContextCorrupted
 	}
 

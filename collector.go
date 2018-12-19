@@ -47,6 +47,11 @@ func (c MultiCollector) aggregateErrors(f func(c Collector) error) error {
 			e.errs[i] = err
 		}
 	}
+
+	if e == nil {
+		return nil
+	}
+
 	return e
 }
 

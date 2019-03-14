@@ -16,21 +16,35 @@ import (
 )
 
 type textMapPropagator struct {
-	tracer *tracerImpl
+	prefixTracerState  string
+	zipkinTraceID      string
+	zipkinSpanID       string
+	zipkinParentSpanID string
+	zipkinSampled      string
+	zipkinFlags        string
 }
 type binaryPropagator struct {
 	tracer *tracerImpl
 }
+//newTextMapPropagator accept prefix of header and make a new textMapPropagator
+func newTextMapPropagator(prefixTracerState string) *textMapPropagator {
+	if prefixTracerState == "" {
+		prefixTracerState = defaultPrefixTracerState
+	}
+	p := &textMapPropagator{
+		prefixTracerState:  prefixTracerState,
+		zipkinTraceID:      prefixTracerState + "traceid",
+		zipkinSpanID:       prefixTracerState + "spanid",
+		zipkinParentSpanID: prefixTracerState + "parentspanid",
+		zipkinSampled:      prefixTracerState + "sampled",
+		zipkinFlags:        prefixTracerState + "flags",
+	}
+	return p
+}
 
 const (
-	prefixTracerState = "x-b3-" // we default to interop with non-opentracing zipkin tracers
-	prefixBaggage     = "ot-baggage-"
-
-	zipkinTraceID      = prefixTracerState + "traceid"
-	zipkinSpanID       = prefixTracerState + "spanid"
-	zipkinParentSpanID = prefixTracerState + "parentspanid"
-	zipkinSampled      = prefixTracerState + "sampled"
-	zipkinFlags        = prefixTracerState + "flags"
+	defaultPrefixTracerState = "x-b3-" // we default to interop with non-opentracing zipkin tracers
+	prefixBaggage            = "ot-baggage-"
 )
 
 func (p *textMapPropagator) Inject(
@@ -48,23 +62,23 @@ func (p *textMapPropagator) Inject(
 
 	// only inject IDs if both trace ID and span ID are present
 	if !sc.TraceID.Empty() && sc.SpanID > 0 {
-		carrier.Set(zipkinTraceID, sc.TraceID.ToHex())
-		carrier.Set(zipkinSpanID, fmt.Sprintf("%016x", sc.SpanID))
+		carrier.Set(p.zipkinTraceID, sc.TraceID.ToHex())
+		carrier.Set(p.zipkinSpanID, fmt.Sprintf("%016x", sc.SpanID))
 		if sc.ParentSpanID != nil {
 			// we only set ParentSpanID header if there is a parent span
-			carrier.Set(zipkinParentSpanID, fmt.Sprintf("%016x", *sc.ParentSpanID))
+			carrier.Set(p.zipkinParentSpanID, fmt.Sprintf("%016x", *sc.ParentSpanID))
 		}
 	}
 
 	if sc.Sampled {
-		carrier.Set(zipkinSampled, "1")
+		carrier.Set(p.zipkinSampled, "1")
 	} else {
-		carrier.Set(zipkinSampled, "0")
+		carrier.Set(p.zipkinSampled, "0")
 	}
 
 	// we only need to inject the debug flag if set. see flag package for details.
 	flags := sc.Flags & flag.Debug
-	carrier.Set(zipkinFlags, strconv.FormatUint(uint64(flags), 10))
+	carrier.Set(p.zipkinFlags, strconv.FormatUint(uint64(flags), 10))
 
 	for k, v := range sc.Baggage {
 		carrier.Set(prefixBaggage+k, v)
@@ -93,7 +107,7 @@ func (p *textMapPropagator) Extract(
 	var traceIDFound, spanIDFound bool
 	err = carrier.ForeachKey(func(k, v string) error {
 		switch strings.ToLower(k) {
-		case zipkinTraceID:
+		case p.zipkinTraceID:
 			traceID, err = types.TraceIDFromHex(v)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
@@ -103,7 +117,7 @@ func (p *textMapPropagator) Extract(
 				requiredFieldCount++
 				traceIDFound = true
 			}
-		case zipkinSpanID:
+		case p.zipkinSpanID:
 			spanID, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
@@ -113,21 +127,21 @@ func (p *textMapPropagator) Extract(
 				requiredFieldCount++
 				spanIDFound = true
 			}
-		case zipkinParentSpanID:
+		case p.zipkinParentSpanID:
 			var id uint64
 			id, err = strconv.ParseUint(v, 16, 64)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
 			parentSpanID = &id
-		case zipkinSampled:
+		case p.zipkinSampled:
 			sampled, err = strconv.ParseBool(v)
 			if err != nil {
 				return opentracing.ErrSpanContextCorrupted
 			}
 			// Sampled header was explicitly set
 			flags |= flag.SamplingSet
-		case zipkinFlags:
+		case p.zipkinFlags:
 			var f uint64
 			f, err = strconv.ParseUint(v, 10, 64)
 			if err != nil {

@@ -110,6 +110,9 @@ type TracerOptions struct {
 	traceID128Bit bool
 
 	observer otobserver.Observer
+
+	//custom header prefix
+	prefixTracerState string
 }
 
 // TracerOption allows for functional options.
@@ -220,14 +223,22 @@ func WithMaxLogsPerSpan(limit int) TracerOption {
 	}
 }
 
+//WithPrefixTracerState is able to change the header prefix from "x-b3-" to other string
+func WithPrefixTracerState(prefix string) TracerOption {
+	return func(opts *TracerOptions) error {
+		opts.prefixTracerState = prefix
+		return nil
+	}
+}
+
 // NewTracer creates a new OpenTracing compatible Zipkin Tracer.
 func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Tracer, error) {
 	opts := &TracerOptions{
-		recorder:             recorder,
-		shouldSample:         alwaysSample,
-		trimUnsampledSpans:   false,
-		newSpanEventListener: func() func(SpanEvent) { return nil },
-		logger:               &nopLogger{},
+		recorder:                   recorder,
+		shouldSample:               alwaysSample,
+		trimUnsampledSpans:         false,
+		newSpanEventListener:       func() func(SpanEvent) { return nil },
+		logger:                     &nopLogger{},
 		debugAssertSingleGoroutine: false,
 		debugAssertUseAfterFinish:  false,
 		clientServerSameSpan:       true,
@@ -243,7 +254,7 @@ func NewTracer(recorder SpanRecorder, options ...TracerOption) (opentracing.Trac
 		}
 	}
 	rval := &tracerImpl{options: *opts}
-	rval.textPropagator = &textMapPropagator{rval}
+	rval.textPropagator = newTextMapPropagator(opts.prefixTracerState)
 	rval.binaryPropagator = &binaryPropagator{rval}
 	rval.accessorPropagator = &accessorPropagator{rval}
 	return rval, nil

@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
+	"github.com/stakhiv/zipkin-go-opentracing/thrift/gen-go/zipkincore"
 )
 
 // makeEndpoint takes the hostport and service name that represent this Zipkin

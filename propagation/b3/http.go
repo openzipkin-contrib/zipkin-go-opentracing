@@ -29,7 +29,7 @@ const (
 )
 
 func InjectHTTP(sc model.SpanContext, carrier interface{}) error {
-	c, ok := carrier.(opentracing.HTTPHeadersCarrier)
+	c, ok := carrier.(opentracing.TextMapWriter)
 	if !ok {
 		return opentracing.ErrInvalidCarrier
 	}
@@ -60,7 +60,7 @@ func InjectHTTP(sc model.SpanContext, carrier interface{}) error {
 }
 
 func ExtractHTTP(carrier interface{}) (*model.SpanContext, error) {
-	c, ok := carrier.(opentracing.HTTPHeadersCarrier)
+	c, ok := carrier.(opentracing.TextMapReader)
 	if !ok {
 		return nil, opentracing.ErrInvalidCarrier
 	}

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openzipkin/zipkin-go"
+
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -98,9 +100,8 @@ func BenchmarkTrimmedSpan_100Events_100Tags_100BaggageItems(b *testing.B) {
 	var r CountingRecorder
 	t, err := NewTracer(
 		&r,
-		TrimUnsampledSpans(true),
-		WithSampler(neverSample),
-		TraceID128Bit(true),
+		zipkin.WithSampler(zipkin.NeverSample),
+		zipkin.WithTraceID128Bit(true),
 	)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)

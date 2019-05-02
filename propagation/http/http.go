@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package b3
+package http
 
 import (
 	"github.com/opentracing/opentracing-go"
@@ -28,7 +28,11 @@ const (
 	flagsHeader        = "x-b3-flags"
 )
 
-func InjectHTTP(sc model.SpanContext, carrier interface{}) error {
+var Propagator = &propagator{}
+
+type propagator struct{}
+
+func (p *propagator) Inject(sc model.SpanContext, carrier interface{}) error {
 	c, ok := carrier.(opentracing.TextMapWriter)
 	if !ok {
 		return opentracing.ErrInvalidCarrier
@@ -59,8 +63,8 @@ func InjectHTTP(sc model.SpanContext, carrier interface{}) error {
 	return nil
 }
 
-func ExtractHTTP(carrier interface{}) (*model.SpanContext, error) {
-	c, ok := carrier.(opentracing.TextMapReader)
+func (p *propagator) Extract(carrier interface{}) (*model.SpanContext, error) {
+	c, ok := carrier.(opentracing.HTTPHeadersCarrier)
 	if !ok {
 		return nil, opentracing.ErrInvalidCarrier
 	}

@@ -1,22 +1,28 @@
 package zipkintracer
 
 import (
+	"errors"
 	"fmt"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go"
+	"github.com/openzipkin/zipkin-go/model"
 )
+
+type Propagator struct {
+	Inject  func(model.SpanContext, interface{}) error
+	Extract func(interface{}) (*model.SpanContext, error)
+}
 
 type tracerImpl struct {
 	zipkinTracer zipkin.Tracer
+	propagators  map[opentracing.BuiltinFormat]Propagator
 }
 
 func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {
-
 	var startSpanOptions opentracing.StartSpanOptions
-
 	for _, opt := range opts {
-		opt(startSpanOptions)
+		opt.Apply(&startSpanOptions)
 	}
 
 	zopts := make([]zipkin.SpanOption, 0)
@@ -34,7 +40,7 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 		zopts = append(zopts, zipkin.StartTime(startSpanOptions.StartTime))
 	}
 
-	newSpan := t.zipkinTracer.StartSpan(operationName, zopts)
+	newSpan := t.zipkinTracer.StartSpan(operationName, zopts...)
 
 	for key, val := range startSpanOptions.Tags {
 		newSpan.Tag(key, fmt.Sprint(val))
@@ -46,27 +52,29 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 }
 
 func (t *tracerImpl) Inject(sc opentracing.SpanContext, format interface{}, carrier interface{}) error {
-	switch format {
-	case opentracing.TextMap, opentracing.HTTPHeaders:
-		return t.textPropagator.Inject(sc, carrier)
-	case opentracing.Binary:
-		return t.binaryPropagator.Inject(sc, carrier)
+	prpg, ok := t.propagators[format.(opentracing.BuiltinFormat)]
+	if !ok {
+		return opentracing.ErrUnsupportedFormat
 	}
-	if _, ok := format.(delegatorType); ok {
-		return t.accessorPropagator.Inject(sc, carrier)
+
+	zsc, ok := sc.(*spanContextImpl)
+	if !ok {
+		return errors.New("unexpected error")
 	}
-	return opentracing.ErrUnsupportedFormat
+
+	return prpg.Inject(zsc, carrier)
 }
 
 func (t *tracerImpl) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
-	switch format {
-	case opentracing.TextMap, opentracing.HTTPHeaders:
-		return t.textPropagator.Extract(carrier)
-	case opentracing.Binary:
-		return t.binaryPropagator.Extract(carrier)
+	prpg, ok := t.propagators[format.(opentracing.BuiltinFormat)]
+	if !ok {
+		return nil, opentracing.ErrUnsupportedFormat
 	}
-	if _, ok := format.(delegatorType); ok {
-		return t.accessorPropagator.Extract(carrier)
+
+	sc, err := prpg.Extract(carrier)
+	if err != nil {
+		return nil, err
 	}
-	return nil, opentracing.ErrUnsupportedFormat
+
+	return &spanContextImpl{zipkinContext: sc}, nil
 }

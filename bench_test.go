@@ -3,8 +3,11 @@ package zipkintracer
 import (
 	"bytes"
 	"fmt"
+	"math/rand"
 	"net/http"
+	"sync"
 	"testing"
+	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
 )
@@ -16,6 +19,18 @@ func init() {
 	for j := 0; j < len(tags); j++ {
 		tags[j] = fmt.Sprintf("%d", randomID())
 	}
+}
+
+var (
+	seededIDGen = rand.New(rand.NewSource(time.Now().UnixNano()))
+	// The golang rand generators are *not* intrinsically thread-safe.
+	seededIDLock sync.Mutex
+)
+
+func randomID() uint64 {
+	seededIDLock.Lock()
+	defer seededIDLock.Unlock()
+	return uint64(seededIDGen.Int63())
 }
 
 func executeOps(sp opentracing.Span, numEvent, numTag, numItems int) {

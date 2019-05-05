@@ -81,9 +81,7 @@ func newJsonHTTPServer(t *testing.T, port int) *jsonHttpServer {
 	handler.HandleFunc("/api/v1/spans", func(w http.ResponseWriter, r *http.Request) {
 		contextType := r.Header.Get("Content-Type")
 		if contextType != "application/json" {
-			t.Fatalf(
-				"except Content-Type should be application/x-thrift, but is %s",
-				contextType)
+			t.Fatalf("except Content-Type should be application/x-thrift, but is %s", contextType)
 		}
 
 		// clone headers from request

@@ -162,7 +162,7 @@ func newJSONHTTPServer(t *testing.T, port int) *jsonHTTPServer {
 	return server
 }
 
-func makeNewJSONSpan(hostPort, serviceName, methodName string, traceID, spanID, parentSpanID uint64, highTraceId *uint64, debug bool) *CoreSpan {
+func makeNewJSONSpan(hostPort, serviceName, methodName string, traceID, spanID, parentSpanID uint64, highTraceID *uint64, debug bool) *CoreSpan {
 	timestamp := time.Now().UnixNano() / 1e3
 	span := &CoreSpan{
 		Name:      methodName,
@@ -171,8 +171,8 @@ func makeNewJSONSpan(hostPort, serviceName, methodName string, traceID, spanID, 
 		Debug:     debug,
 		Timestamp: timestamp,
 	}
-	if highTraceId != nil {
-		span.TraceIDHigh = fmt.Sprintf("%08x", *highTraceId)
+	if highTraceID != nil {
+		span.TraceIDHigh = fmt.Sprintf("%08x", *highTraceID)
 		span.TraceID = span.TraceIDHigh + span.TraceID
 	}
 

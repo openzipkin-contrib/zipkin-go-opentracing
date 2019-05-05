@@ -3,7 +3,6 @@ package zipkintracer
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/openzipkin-contrib/zipkin-go-opentracing/models"
 	"net/http"
 	"time"
 )
@@ -16,7 +15,7 @@ type JsonHTTPCollector struct {
 	batchInterval time.Duration
 	batchSize     int
 	maxBacklog    int
-	spanc         chan *models.Span
+	spanc         chan *CoreSpan
 	quit          chan struct{}
 	shutdown      chan error
 	reqCallback   RequestCallback
@@ -93,7 +92,7 @@ func NewJsonHTTPCollector(url string, options ...JsonHTTPOption) (CollectorAgnos
 	}
 
 	// spanc can immediately accept maxBacklog spans and everything else is dropped.
-	c.spanc = make(chan *models.Span, c.maxBacklog)
+	c.spanc = make(chan *CoreSpan, c.maxBacklog)
 
 	go c.loop()
 	return c, nil
@@ -101,7 +100,7 @@ func NewJsonHTTPCollector(url string, options ...JsonHTTPOption) (CollectorAgnos
 
 // Collect implements Collector.
 // attempts a non blocking send on the channel.
-func (c *JsonHTTPCollector) Collect(s *models.Span) error {
+func (c *JsonHTTPCollector) Collect(s *CoreSpan) error {
 	select {
 	case c.spanc <- s:
 		// Accepted.
@@ -129,7 +128,7 @@ func (c *JsonHTTPCollector) loop() {
 
 	// The following loop is single threaded
 	// allocate enough space so we don't have to reallocate.
-	batch := make([]*models.Span, 0, c.batchSize)
+	batch := make([]*CoreSpan, 0, c.batchSize)
 
 	for {
 		select {
@@ -155,7 +154,7 @@ func (c *JsonHTTPCollector) loop() {
 	}
 }
 
-func (c *JsonHTTPCollector) send(sendBatch []*models.Span) error {
+func (c *JsonHTTPCollector) send(sendBatch []*CoreSpan) error {
 
 	payload, err := json.Marshal(sendBatch)
 	if err != nil {

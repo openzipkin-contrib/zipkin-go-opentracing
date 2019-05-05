@@ -1,0 +1,62 @@
+hash: 8425e28feda0ec96a346dd2f81593b49656c32cdaaf580157aa4049aad9ca09b
+updated: 2019-05-05T14:27:57.808277-03:00
+imports:
+- name: github.com/apache/thrift
+  version: acdd4226c210336e9e15eb812e5932a645fcd5ce
+  subpackages:
+  - lib/go/thrift
+- name: github.com/DataDog/zstd
+  version: 809b919c325d7887bff7bd876162af73db53e878
+- name: github.com/davecgh/go-spew
+  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
+  subpackages:
+  - spew
+- name: github.com/eapache/go-resiliency
+  version: 842e16ec2c98ef0c59eebfe60d2d3500a793ba19
+  subpackages:
+  - breaker
+- name: github.com/eapache/go-xerial-snappy
+  version: 776d5712da21bc4762676d614db1d8a64f4238b0
+- name: github.com/eapache/queue
+  version: 093482f3f8ce946c05bcba64badd2c82369e084d
+- name: github.com/go-logfmt/logfmt
+  version: 07c9b44f60d7ffdfb7d8efe1ad539965737836dc
+- name: github.com/gogo/protobuf
+  version: 67e450fba6944c63d2f80b7553b0ef522d345962
+  subpackages:
+  - proto
+- name: github.com/golang/snappy
+  version: 2a8bb927dd31d8daada140a5d09578521ce5c36a
+- name: github.com/kr/logfmt
+  version: b84e30acd515aadc4b783ad4ff83aff3299bdfe0
+- name: github.com/opentracing-contrib/go-observer
+  version: a52f2342449246d5bcc273e65cbdcfa5f7d6c63c
+- name: github.com/opentracing/opentracing-go
+  version: 659c90643e714681897ec2521c60567dd21da733
+  subpackages:
+  - ext
+  - log
+- name: github.com/pierrec/lz4
+  version: d705d4371bfccdf47f10e45584e896026c83616f
+  subpackages:
+  - internal/xxh32
+- name: github.com/rcrowley/go-metrics
+  version: 3113b8401b8a98917cde58f8bbd42a1b1c03b1fd
+- name: github.com/Shopify/sarama
+  version: 457a8e63133f18a8c625304a79d5d76de2e3fda2
+- name: golang.org/x/net
+  version: f4e77d36d62c17c2336347bb2670ddbd02d092b7
+  subpackages:
+  - internal/socks
+  - internal/timeseries
+  - proxy
+  - trace
+testImports:
+- name: github.com/pmezard/go-difflib
+  version: 5d4384ee4fb2527b0a1256a821ebfc92f91efefc
+  subpackages:
+  - difflib
+- name: github.com/stretchr/testify
+  version: 34c6fa2dc70986bccbbffcc6130f6920a924b075
+  subpackages:
+  - assert

@@ -1,0 +1,25 @@
+package: github.com/openzipkin-contrib/zipkin-go-opentracing
+import:
+- package: github.com/Shopify/sarama
+- package: github.com/apache/thrift
+  subpackages:
+  - lib/go/thrift
+- package: github.com/go-logfmt/logfmt
+- package: github.com/gogo/protobuf
+  subpackages:
+  - proto
+- package: github.com/opentracing-contrib/go-observer
+- package: github.com/opentracing/opentracing-go
+  subpackages:
+  - ext
+  - log
+- package: golang.org/x/net
+  subpackages:
+  - trace
+testImport:
+- package: github.com/davecgh/go-spew
+  subpackages:
+  - spew
+- package: github.com/stretchr/testify
+  subpackages:
+  - assert

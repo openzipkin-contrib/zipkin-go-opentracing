@@ -1,14 +1,13 @@
 package zipkintracer
 
 import (
-	"github.com/openzipkin-contrib/zipkin-go-opentracing/models"
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
 )
 
 // Collector represents a Zipkin trace collector, which is probably a set of
 // remote endpoints.
 type CollectorAgnostic interface {
-	Collect(*models.Span) error
+	Collect(*CoreSpan) error
 	Close() error
 }
 

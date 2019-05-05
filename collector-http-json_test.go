@@ -3,7 +3,6 @@ package zipkintracer
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/openzipkin-contrib/zipkin-go-opentracing/models"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -58,12 +57,12 @@ func TestJsonHttpCollector(t *testing.T) {
 
 type jsonHttpServer struct {
 	t            *testing.T
-	zipkinSpans  []*models.Span
+	zipkinSpans  []*CoreSpan
 	zipkinHeader http.Header
 	mutex        sync.RWMutex
 }
 
-func (s *jsonHttpServer) spans() []*models.Span {
+func (s *jsonHttpServer) spans() []*CoreSpan {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 	return s.zipkinSpans
@@ -72,7 +71,7 @@ func (s *jsonHttpServer) spans() []*models.Span {
 func newJsonHTTPServer(t *testing.T, port int) *jsonHttpServer {
 	server := &jsonHttpServer{
 		t:           t,
-		zipkinSpans: make([]*models.Span, 0),
+		zipkinSpans: make([]*CoreSpan, 0),
 		mutex:       sync.RWMutex{},
 	}
 
@@ -96,7 +95,7 @@ func newJsonHTTPServer(t *testing.T, port int) *jsonHttpServer {
 		if err != nil {
 			t.Fatal(err)
 		}
-		var spans []*models.Span
+		var spans []*CoreSpan
 		if err := json.Unmarshal(body, &spans); err != nil {
 			log.Fatal(err.Error())
 		}
@@ -118,9 +117,9 @@ func newJsonHTTPServer(t *testing.T, port int) *jsonHttpServer {
 	return server
 }
 
-func makeNewJsonSpan(hostPort, serviceName, methodName string, traceID, spanID, parentSpanID uint64, debug bool) *models.Span {
+func makeNewJsonSpan(hostPort, serviceName, methodName string, traceID, spanID, parentSpanID uint64, debug bool) *CoreSpan {
 	timestamp := time.Now().UnixNano() / 1e3
-	return &models.Span{
+	return &CoreSpan{
 		TraceID:   fmt.Sprintf("%d", traceID),
 		Name:      methodName,
 		ID:        fmt.Sprintf("%d", spanID),

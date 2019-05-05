@@ -4,7 +4,6 @@ import (
 	"fmt"
 	otext "github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
-	"github.com/openzipkin-contrib/zipkin-go-opentracing/models"
 
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/flag"
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
@@ -82,7 +81,7 @@ func (r *JsonRecorder) RecordSpan(sp RawSpan) {
 	if !sp.Context.Sampled {
 		return
 	}
-	span := &models.Span{
+	span := &CoreSpan{
 		Name:        sp.Operation,
 		ID:          fmt.Sprintf("%d", sp.Context.SpanID),
 		TraceID:     fmt.Sprintf("%d", sp.Context.TraceID.Low),
@@ -110,7 +109,7 @@ func (r *JsonRecorder) RecordSpan(sp RawSpan) {
 	_ = r.collector.Collect(span)
 }
 
-func annotateBinaryCore(span *models.Span, key string, value interface{}, host *zipkincore.Endpoint) {
+func annotateBinaryCore(span *CoreSpan, key string, value interface{}, host *zipkincore.Endpoint) {
 	if b, ok := value.(bool); ok {
 		if b {
 			value = "true"
@@ -118,9 +117,9 @@ func annotateBinaryCore(span *models.Span, key string, value interface{}, host *
 			value = "false"
 		}
 	}
-	span.BinaryAnnotations = append(span.BinaryAnnotations, &models.BinaryAnnotation{
+	span.BinaryAnnotations = append(span.BinaryAnnotations, &CoreBinaryAnnotation{
 		Key:      key,
 		Value:    fmt.Sprintf("%+v", value),
-		Endpoint: models.Endpoint{ServiceName: host.ServiceName, Port: host.Port, Ipv4: fmt.Sprintf("%d", host.Ipv4), Ipv6: string(host.Ipv6)},
+		Endpoint: CoreEndpoint{ServiceName: host.ServiceName, Port: host.Port, Ipv4: fmt.Sprintf("%d", host.Ipv4), Ipv6: string(host.Ipv6)},
 	})
 }

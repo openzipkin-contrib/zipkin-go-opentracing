@@ -43,13 +43,13 @@ func TestJsonHttpCollector(t *testing.T) {
 	if want, have := methodName, gotSpan.Name; want != have {
 		t.Errorf("want %q, have %q", want, have)
 	}
-	if want, have := fmt.Sprintf("%d", traceID), gotSpan.TraceID; want != have {
+	if want, have := fmt.Sprintf("%08x", traceID), gotSpan.TraceID; want != have {
 		t.Errorf("want %s, have %s", want, have)
 	}
-	if want, have := fmt.Sprintf("%d", spanID), gotSpan.ID; want != have {
+	if want, have := fmt.Sprintf("%08x", spanID), gotSpan.ID; want != have {
 		t.Errorf("want %s, have %s", want, have)
 	}
-	if want, have := fmt.Sprintf("%d", parentSpanID), gotSpan.ParentID; want != have {
+	if want, have := "", gotSpan.ParentID; want != have {
 		t.Errorf("want %s, have %s", want, have)
 	}
 
@@ -119,12 +119,17 @@ func newJsonHTTPServer(t *testing.T, port int) *jsonHttpServer {
 
 func makeNewJsonSpan(hostPort, serviceName, methodName string, traceID, spanID, parentSpanID uint64, debug bool) *CoreSpan {
 	timestamp := time.Now().UnixNano() / 1e3
-	return &CoreSpan{
-		TraceID:   fmt.Sprintf("%d", traceID),
+	span := &CoreSpan{
 		Name:      methodName,
-		ID:        fmt.Sprintf("%d", spanID),
-		ParentID:  fmt.Sprintf("%d", parentSpanID),
+		TraceID:   fmt.Sprintf("%08x", traceID),
+		ID:        fmt.Sprintf("%08x", spanID),
 		Debug:     debug,
 		Timestamp: timestamp,
 	}
+
+	if parentSpanID > 0 {
+		span.ParentID = fmt.Sprintf("%08x", parentSpanID)
+	}
+
+	return span
 }

@@ -83,12 +83,19 @@ func (r *JsonRecorder) RecordSpan(sp RawSpan) {
 	}
 	span := &CoreSpan{
 		Name:        sp.Operation,
-		ID:          fmt.Sprintf("%d", sp.Context.SpanID),
-		TraceID:     fmt.Sprintf("%d", sp.Context.TraceID.Low),
-		TraceIDHigh: fmt.Sprintf("%d", sp.Context.TraceID.High),
-		ParentID:    fmt.Sprintf("%d", sp.Context.ParentSpanID),
+		ID:          fmt.Sprintf("%08x", sp.Context.SpanID),
+		TraceID:     fmt.Sprintf("%08x", sp.Context.TraceID.Low),
 		Debug:       r.debug || (sp.Context.Flags&flag.Debug == flag.Debug),
 	}
+
+	if sp.Context.TraceID.High > 0 {
+		span.TraceIDHigh = fmt.Sprintf("%08x", sp.Context.TraceID.High)
+	}
+
+	if sp.Context.ParentSpanID != nil {
+		span.ParentID = fmt.Sprintf("%08x", *sp.Context.ParentSpanID)
+	}
+
 	// only send timestamp and duration if this process owns the current span.
 	if sp.Context.Owner {
 		timestamp := sp.Start.UnixNano() / 1e3

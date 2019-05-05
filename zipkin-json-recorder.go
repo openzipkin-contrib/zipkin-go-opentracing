@@ -50,7 +50,7 @@ func JSONWithStrictMaterializer() JSONRecorderOption {
 	}
 }
 
-// NewJsonRecorder creates a new Zipkin Recorder backed by the provided Collector.
+// NewJSONRecorder creates a new Zipkin Recorder backed by the provided Collector.
 //
 // hostPort and serviceName allow you to set the default Zipkin endpoint
 // information which will be added to the application's standard core
@@ -66,7 +66,7 @@ func JSONWithStrictMaterializer() JSONRecorderOption {
 //
 //  # network address and port are not applicable:
 //  NewRecorder(c, debug, "0.0.0.0:0", "ServiceB")
-func NewJsonRecorder(c AgnosticCollector, debug bool, hostPort, serviceName string, options ...JSONRecorderOption) SpanRecorder {
+func NewJSONRecorder(c AgnosticCollector, debug bool, hostPort, serviceName string, options ...JSONRecorderOption) SpanRecorder {
 	r := &JSONRecorder{
 		collector:    c,
 		debug:        debug,

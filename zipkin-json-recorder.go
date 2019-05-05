@@ -15,11 +15,11 @@ import (
 
 var (
 	// SpanKindResource will be regarded as a SA annotation by Zipkin.
-	JsonSpanKindResource = otext.SpanKindEnum("resource")
+	JSONSpanKindResource = otext.SpanKindEnum("resource")
 )
 
 // Recorder implements the SpanRecorder interface.
-type JsonRecorder struct {
+type JSONRecorder struct {
 	collector    AgnosticCollector
 	debug        bool
 	endpoint     *zipkincore.Endpoint
@@ -27,25 +27,25 @@ type JsonRecorder struct {
 }
 
 // RecorderOption allows for functional options.
-type JsonRecorderOption func(r *JsonRecorder)
+type JSONRecorderOption func(r *JSONRecorder)
 
 // WithLogFmtMaterializer will convert OpenTracing Log fields to a LogFmt representation.
-func JsonWithLogFmtMaterializer() JsonRecorderOption {
-	return func(r *JsonRecorder) {
+func JSONWithLogFmtMaterializer() JSONRecorderOption {
+	return func(r *JSONRecorder) {
 		r.materializer = MaterializeWithLogFmt
 	}
 }
 
 // WithJSONMaterializer will convert OpenTracing Log fields to a JSON representation.
-func JsonWithJSONMaterializer() JsonRecorderOption {
-	return func(r *JsonRecorder) {
+func JSONWithJSONMaterializer() JSONRecorderOption {
+	return func(r *JSONRecorder) {
 		r.materializer = MaterializeWithJSON
 	}
 }
 
 // WithStrictMaterializer will only record event Log fields and discard the rest.
-func JsonWithStrictMaterializer() JsonRecorderOption {
-	return func(r *JsonRecorder) {
+func JSONWithStrictMaterializer() JSONRecorderOption {
+	return func(r *JSONRecorder) {
 		r.materializer = StrictZipkinMaterializer
 	}
 }
@@ -66,8 +66,8 @@ func JsonWithStrictMaterializer() JsonRecorderOption {
 //
 //  # network address and port are not applicable:
 //  NewRecorder(c, debug, "0.0.0.0:0", "ServiceB")
-func NewJsonRecorder(c AgnosticCollector, debug bool, hostPort, serviceName string, options ...JsonRecorderOption) SpanRecorder {
-	r := &JsonRecorder{
+func NewJsonRecorder(c AgnosticCollector, debug bool, hostPort, serviceName string, options ...JSONRecorderOption) SpanRecorder {
+	r := &JSONRecorder{
 		collector:    c,
 		debug:        debug,
 		endpoint:     makeEndpoint(hostPort, serviceName),
@@ -81,7 +81,7 @@ func NewJsonRecorder(c AgnosticCollector, debug bool, hostPort, serviceName stri
 
 // RecordSpan converts a RawSpan into the Zipkin representation of a span
 // and records it to the underlying collector.
-func (r *JsonRecorder) RecordSpan(sp RawSpan) {
+func (r *JSONRecorder) RecordSpan(sp RawSpan) {
 	if !sp.Context.Sampled {
 		return
 	}

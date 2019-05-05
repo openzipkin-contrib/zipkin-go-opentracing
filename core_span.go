@@ -9,6 +9,7 @@ type CoreSpan struct {
 	Timestamp         int64                   `json:"timestamp,omitempty"`
 	Duration          int64                   `json:"duration,omitempty"`
 	TraceIDHigh       string                  `json:"traceIdHigh,omitempty"`
+	Annotations       []*CoreAnnotation       `json:"annotations"`
 	BinaryAnnotations []*CoreBinaryAnnotation `json:"binaryAnnotations"`
 }
 
@@ -16,6 +17,12 @@ type CoreBinaryAnnotation struct {
 	Key      string       `json:"key"`
 	Value    string       `json:"value"`
 	Endpoint CoreEndpoint `json:"endpoint"`
+}
+
+type CoreAnnotation struct {
+	Timestamp int64         `json:"timestamp"`
+	Value     string        `json:"value"`
+	Host      *CoreEndpoint `json:"host,omitempty"`
 }
 
 type CoreEndpoint struct {

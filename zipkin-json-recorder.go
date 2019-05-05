@@ -1,9 +1,13 @@
 package zipkintracer
 
 import (
+	"encoding/binary"
 	"fmt"
 	otext "github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
+	"net"
+	"strconv"
+	"time"
 
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/flag"
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
@@ -90,6 +94,7 @@ func (r *JsonRecorder) RecordSpan(sp RawSpan) {
 
 	if sp.Context.TraceID.High > 0 {
 		span.TraceIDHigh = fmt.Sprintf("%08x", sp.Context.TraceID.High)
+		span.TraceID = span.TraceIDHigh + span.TraceID
 	}
 
 	if sp.Context.ParentSpanID != nil {
@@ -109,11 +114,70 @@ func (r *JsonRecorder) RecordSpan(sp RawSpan) {
 		span.Duration = duration
 	}
 
+	if kind, ok := sp.Tags[string(otext.SpanKind)]; ok {
+		switch kind {
+		case otext.SpanKindRPCClient, otext.SpanKindRPCClientEnum:
+			annotateCore(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
+			annotateCore(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
+		case otext.SpanKindRPCServer, otext.SpanKindRPCServerEnum:
+			annotateCore(span, sp.Start, zipkincore.SERVER_RECV, r.endpoint)
+			annotateCore(span, sp.Start.Add(sp.Duration), zipkincore.SERVER_SEND, r.endpoint)
+		case SpanKindResource:
+			serviceName, ok := sp.Tags[string(otext.PeerService)]
+			if !ok {
+				serviceName = r.endpoint.GetServiceName()
+			}
+			host, ok := sp.Tags[string(otext.PeerHostname)].(string)
+			if !ok {
+				if r.endpoint.GetIpv4() > 0 {
+					ip := make([]byte, 4)
+					binary.BigEndian.PutUint32(ip, uint32(r.endpoint.GetIpv4()))
+					host = net.IP(ip).To4().String()
+				} else {
+					ip := r.endpoint.GetIpv6()
+					host = net.IP(ip).String()
+				}
+			}
+			var sPort string
+			port, ok := sp.Tags[string(otext.PeerPort)]
+			if !ok {
+				sPort = strconv.FormatInt(int64(r.endpoint.GetPort()), 10)
+			} else {
+				sPort = strconv.FormatInt(int64(port.(uint16)), 10)
+			}
+			re := makeEndpoint(net.JoinHostPort(host, sPort), serviceName.(string))
+			if re != nil {
+				annotateBinaryCore(span, zipkincore.SERVER_ADDR, serviceName, re)
+			} else {
+				fmt.Printf("endpoint creation failed: host: %q port: %q", host, sPort)
+			}
+			annotateCore(span, sp.Start, zipkincore.CLIENT_SEND, r.endpoint)
+			annotateCore(span, sp.Start.Add(sp.Duration), zipkincore.CLIENT_RECV, r.endpoint)
+		default:
+			annotateBinaryCore(span, zipkincore.LOCAL_COMPONENT, r.endpoint.GetServiceName(), r.endpoint)
+		}
+		delete(sp.Tags, string(otext.SpanKind))
+	} else {
+		annotateBinaryCore(span, zipkincore.LOCAL_COMPONENT, r.endpoint.GetServiceName(), r.endpoint)
+	}
+
 	for key, value := range sp.Tags {
 		annotateBinaryCore(span, key, value, r.endpoint)
 	}
 
 	_ = r.collector.Collect(span)
+}
+
+// annotate annotates the span with the given value.
+func annotateCore(span *CoreSpan, timestamp time.Time, value string, host *zipkincore.Endpoint) {
+	if timestamp.IsZero() {
+		timestamp = time.Now()
+	}
+	span.Annotations = append(span.Annotations, &CoreAnnotation{
+		Timestamp: timestamp.UnixNano() / 1e3,
+		Value:     value,
+		Host:      &CoreEndpoint{ServiceName: host.ServiceName, Port: host.Port, Ipv4: fmt.Sprintf("%d", host.Ipv4), Ipv6: string(host.Ipv6)},
+	})
 }
 
 func annotateBinaryCore(span *CoreSpan, key string, value interface{}, host *zipkincore.Endpoint) {

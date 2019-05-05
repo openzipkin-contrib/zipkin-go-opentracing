@@ -22,7 +22,7 @@ type BinaryAnnotation struct {
 
 type Endpoint struct {
 	Ipv4 string `json:"ipv4"`
-	Port int64  `json:"port"`
+	Port int16  `json:"port"`
 	ServiceName string `json:"serviceName"`
 	Ipv6 string `json:"ipv6,omitempty"`
 }

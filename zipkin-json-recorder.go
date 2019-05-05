@@ -121,5 +121,6 @@ func annotateBinaryCore(span *models.Span, key string, value interface{}, host *
 	span.BinaryAnnotations = append(span.BinaryAnnotations, &models.BinaryAnnotation{
 		Key:            key,
 		Value:          fmt.Sprintf("%+v", value),
+		Endpoint:       models.Endpoint{ServiceName: host.ServiceName, Port: host.Port, Ipv4: fmt.Sprintf("%d", host.Ipv4), Ipv6: string(host.Ipv6)},
 	})
 }

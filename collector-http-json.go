@@ -75,7 +75,7 @@ func JsonHTTPRequestCallback(rc RequestCallback) JsonHTTPOption {
 // url for handle post request. timeout is passed to http client. queueSize control
 // the maximum size of buffer of async queue. The logger is used to log errors,
 // such as send failures;
-func NewJsonHTTPCollector(url string, options ...JsonHTTPOption) (CollectorAgnostic, error) {
+func NewJsonHTTPCollector(url string, options ...JsonHTTPOption) (AgnosticCollector, error) {
 	c := &JsonHTTPCollector{
 		logger:        NewNopLogger(),
 		url:           url,

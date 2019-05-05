@@ -6,7 +6,7 @@ import (
 
 // Collector represents a Zipkin trace collector, which is probably a set of
 // remote endpoints.
-type CollectorAgnostic interface {
+type AgnosticCollector interface {
 	Collect(*CoreSpan) error
 	Close() error
 }

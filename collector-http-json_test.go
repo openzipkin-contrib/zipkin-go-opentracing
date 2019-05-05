@@ -25,7 +25,7 @@ func TestJsonHttpCollector(t *testing.T) {
 	var (
 		serviceName  = "service"
 		methodName   = "method"
-		traceID      = uint64(123)
+		traceID      = uint64(17051370458307041793)
 		spanID       = uint64(456)
 		parentSpanID = uint64(0)
 	)

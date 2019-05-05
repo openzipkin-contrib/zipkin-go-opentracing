@@ -20,7 +20,7 @@ var (
 
 // Recorder implements the SpanRecorder interface.
 type JsonRecorder struct {
-	collector    CollectorAgnostic
+	collector    AgnosticCollector
 	debug        bool
 	endpoint     *zipkincore.Endpoint
 	materializer func(logFields []log.Field) ([]byte, error)
@@ -66,7 +66,7 @@ func JsonWithStrictMaterializer() JsonRecorderOption {
 //
 //  # network address and port are not applicable:
 //  NewRecorder(c, debug, "0.0.0.0:0", "ServiceB")
-func NewJsonRecorder(c CollectorAgnostic, debug bool, hostPort, serviceName string, options ...JsonRecorderOption) SpanRecorder {
+func NewJsonRecorder(c AgnosticCollector, debug bool, hostPort, serviceName string, options ...JsonRecorderOption) SpanRecorder {
 	r := &JsonRecorder{
 		collector:    c,
 		debug:        debug,

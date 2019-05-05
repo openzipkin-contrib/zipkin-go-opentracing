@@ -1,8 +1,8 @@
-hash: 8425e28feda0ec96a346dd2f81593b49656c32cdaaf580157aa4049aad9ca09b
-updated: 2019-05-04T19:10:49.896038-03:00
+hash: 1d07f24231eadb315bc764e5a284dcd424232096821b7032a6591e15930fe05f
+updated: 2019-05-05T14:16:01.846742-03:00
 imports:
 - name: github.com/apache/thrift
-  version: 384647d290e2e4a55a14b1b7ef1b7e66293a2c33
+  version: acdd4226c210336e9e15eb812e5932a645fcd5ce
   subpackages:
   - lib/go/thrift
 - name: github.com/DataDog/zstd
@@ -37,7 +37,7 @@ imports:
   - ext
   - log
 - name: github.com/pierrec/lz4
-  version: 816fbc099d9e0d25da206d06d3171b970624e4a0
+  version: d705d4371bfccdf47f10e45584e896026c83616f
   subpackages:
   - internal/xxh32
 - name: github.com/rcrowley/go-metrics

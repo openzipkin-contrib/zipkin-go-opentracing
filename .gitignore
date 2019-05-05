@@ -2,5 +2,3 @@ build/*
 .idea/
 .project
 examples/**/build
-/vendor/
-vendor/*

@@ -1,4 +1,4 @@
-package: github.com/openzipkin-contrib/zipkin-go-opentracing
+package: github.com/Stocco/zipkin-go-opentracing
 import:
 - package: github.com/Shopify/sarama
 - package: github.com/apache/thrift

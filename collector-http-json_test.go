@@ -16,8 +16,8 @@ func TestJsonHttpCollector(t *testing.T) {
 
 	port := 18720
 	server := newJsonHTTPServer(t, port)
-	c, err := NewJsonHTTPCollector(fmt.Sprintf("http://localhost:%d/api/v1/spans", port),
-		JsonHTTPBatchSize(1))
+	c, err := NewJSONHTTPCollector(fmt.Sprintf("http://localhost:%d/api/v1/spans", port),
+		JSONHTTPBatchSize(1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,8 +60,8 @@ func TestHighTraceIdJsonHttpCollector(t *testing.T) {
 
 	port := 18721
 	server := newJsonHTTPServer(t, port)
-	c, err := NewJsonHTTPCollector(fmt.Sprintf("http://localhost:%d/api/v1/spans", port),
-		JsonHTTPBatchSize(1))
+	c, err := NewJSONHTTPCollector(fmt.Sprintf("http://localhost:%d/api/v1/spans", port),
+		JSONHTTPBatchSize(1))
 	if err != nil {
 		t.Fatal(err)
 	}

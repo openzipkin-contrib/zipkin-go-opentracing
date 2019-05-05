@@ -4,14 +4,14 @@ import (
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/thrift/gen-go/zipkincore"
 )
 
-// Collector represents a Zipkin trace collector, which is probably a set of
+// AgnosticCollector represents a Zipkin trace collector, which is probably a set of
 // remote endpoints.
 type AgnosticCollector interface {
 	Collect(*CoreSpan) error
 	Close() error
 }
 
-// NopCollector implements Collector but performs no work.
+// NopAgnosticCollector implements Collector but performs no work.
 type NopAgnosticCollector struct{}
 
 // Collect implements Collector.

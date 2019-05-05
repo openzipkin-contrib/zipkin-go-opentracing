@@ -84,10 +84,10 @@ func (r *JsonRecorder) RecordSpan(sp RawSpan) {
 	}
 	span := &models.Span{
 		Name:        sp.Operation,
-		ID:          sp.Context.SpanID,
-		TraceID:     sp.Context.TraceID.Low,
-		TraceIDHigh: sp.Context.TraceID.High,
-		ParentID:    sp.Context.ParentSpanID,
+		ID:          fmt.Sprintf("%d", sp.Context.SpanID),
+		TraceID:     fmt.Sprintf("%d", sp.Context.TraceID.Low),
+		TraceIDHigh: fmt.Sprintf("%d", sp.Context.TraceID.High),
+		ParentID:    fmt.Sprintf("%d", sp.Context.ParentSpanID),
 		Debug:       r.debug || (sp.Context.Flags&flag.Debug == flag.Debug),
 	}
 	// only send timestamp and duration if this process owns the current span.
@@ -120,6 +120,6 @@ func annotateBinaryCore(span *models.Span, key string, value interface{}, host *
 	}
 	span.BinaryAnnotations = append(span.BinaryAnnotations, &models.BinaryAnnotation{
 		Key:            key,
-		Value:          []byte(fmt.Sprintf("%+v", value)),
+		Value:          fmt.Sprintf("%+v", value),
 	})
 }

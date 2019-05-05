@@ -14,11 +14,11 @@ import (
 )
 
 var (
-	// SpanKindResource will be regarded as a SA annotation by Zipkin.
+	// JSONSpanKindResource will be regarded as a SA annotation by Zipkin.
 	JSONSpanKindResource = otext.SpanKindEnum("resource")
 )
 
-// Recorder implements the SpanRecorder interface.
+// JSONRecorder implements the SpanRecorder interface.
 type JSONRecorder struct {
 	collector    AgnosticCollector
 	debug        bool
@@ -26,31 +26,31 @@ type JSONRecorder struct {
 	materializer func(logFields []log.Field) ([]byte, error)
 }
 
-// RecorderOption allows for functional options.
+// JSONRecorderOption allows for functional options.
 type JSONRecorderOption func(r *JSONRecorder)
 
-// WithLogFmtMaterializer will convert OpenTracing Log fields to a LogFmt representation.
+// JSONWithLogFmtMaterializer will convert OpenTracing Log fields to a LogFmt representation.
 func JSONWithLogFmtMaterializer() JSONRecorderOption {
 	return func(r *JSONRecorder) {
 		r.materializer = MaterializeWithLogFmt
 	}
 }
 
-// WithJSONMaterializer will convert OpenTracing Log fields to a JSON representation.
+// JSONWithJSONMaterializer will convert OpenTracing Log fields to a JSON representation.
 func JSONWithJSONMaterializer() JSONRecorderOption {
 	return func(r *JSONRecorder) {
 		r.materializer = MaterializeWithJSON
 	}
 }
 
-// WithStrictMaterializer will only record event Log fields and discard the rest.
+// JSONWithStrictMaterializer will only record event Log fields and discard the rest.
 func JSONWithStrictMaterializer() JSONRecorderOption {
 	return func(r *JSONRecorder) {
 		r.materializer = StrictZipkinMaterializer
 	}
 }
 
-// NewRecorder creates a new Zipkin Recorder backed by the provided Collector.
+// NewJsonRecorder creates a new Zipkin Recorder backed by the provided Collector.
 //
 // hostPort and serviceName allow you to set the default Zipkin endpoint
 // information which will be added to the application's standard core
@@ -168,7 +168,7 @@ func (r *JSONRecorder) RecordSpan(sp RawSpan) {
 	_ = r.collector.Collect(span)
 }
 
-// annotate annotates the span with the given value.
+// annotateCore annotates the span with the given value.
 func annotateCore(span *CoreSpan, timestamp time.Time, value string, host *zipkincore.Endpoint) {
 	if timestamp.IsZero() {
 		timestamp = time.Now()
@@ -180,6 +180,7 @@ func annotateCore(span *CoreSpan, timestamp time.Time, value string, host *zipki
 	})
 }
 
+// annotateBinaryCore annotates the span with the given value.
 func annotateBinaryCore(span *CoreSpan, key string, value interface{}, host *zipkincore.Endpoint) {
 	if b, ok := value.(bool); ok {
 		if b {

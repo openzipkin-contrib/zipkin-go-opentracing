@@ -86,10 +86,10 @@ func (r *JsonRecorder) RecordSpan(sp RawSpan) {
 		return
 	}
 	span := &CoreSpan{
-		Name:        sp.Operation,
-		ID:          fmt.Sprintf("%08x", sp.Context.SpanID),
-		TraceID:     fmt.Sprintf("%08x", sp.Context.TraceID.Low),
-		Debug:       r.debug || (sp.Context.Flags&flag.Debug == flag.Debug),
+		Name:    sp.Operation,
+		ID:      fmt.Sprintf("%08x", sp.Context.SpanID),
+		TraceID: fmt.Sprintf("%08x", sp.Context.TraceID.Low),
+		Debug:   r.debug || (sp.Context.Flags&flag.Debug == flag.Debug),
 	}
 
 	if sp.Context.TraceID.High > 0 {

@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-
 // HTTPCollector implements Collector by forwarding spans to a http server.
 type JsonHTTPCollector struct {
 	logger        Logger

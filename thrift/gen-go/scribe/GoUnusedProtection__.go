@@ -3,5 +3,4 @@
 
 package scribe
 
-var GoUnusedProtection__ int;
-
+var GoUnusedProtection__ int

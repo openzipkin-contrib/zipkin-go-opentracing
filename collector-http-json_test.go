@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-
 func TestJsonHttpCollector(t *testing.T) {
 	t.Parallel()
 
@@ -36,7 +35,6 @@ func TestJsonHttpCollector(t *testing.T) {
 	if err := c.Collect(span); err != nil {
 		t.Errorf("error during collection: %v", err)
 	}
-
 
 	if err = eventually(func() bool { return len(server.spans()) == 1 }, 1*time.Second); err != nil {
 		t.Fatalf("never received a span %v", server.spans())

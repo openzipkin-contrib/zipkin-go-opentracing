@@ -20,4 +20,3 @@ func (NopAgnosticCollector) Collect(*zipkincore.Span) error { return nil }
 
 // Close implements Collector.
 func (NopAgnosticCollector) Close() error { return nil }
-

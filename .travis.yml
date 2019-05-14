@@ -14,4 +14,3 @@ install:
 
 script:
   - make test vet lint bench
-  - make lint

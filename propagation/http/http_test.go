@@ -20,6 +20,7 @@ import (
 
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/propagation/http"
 
+	"github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/model"
 	zb3 "github.com/openzipkin/zipkin-go/propagation/b3"
@@ -30,7 +31,7 @@ func TestHTTPExtractFlagsOnly(t *testing.T) {
 	c := stdHTTP.Header{}
 	c.Set(zb3.Flags, "1")
 
-	sc, err := http.Propagator.Extract(c)
+	sc, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 	if err != nil {
 		t.Fatalf("Extract failed: %+v", err)
 	}
@@ -44,7 +45,7 @@ func TestHTTPExtractSampledOnly(t *testing.T) {
 	c := stdHTTP.Header{}
 	c.Set(zb3.Sampled, "0")
 
-	sc, err := http.Propagator.Extract(c)
+	sc, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 	if err != nil {
 		t.Fatalf("Extract failed: %+v", err)
 	}
@@ -60,7 +61,7 @@ func TestHTTPExtractSampledOnly(t *testing.T) {
 	c = stdHTTP.Header{}
 	c.Set(zb3.Sampled, "1")
 
-	sc, err = http.Propagator.Extract(c)
+	sc, err = http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 	if err != nil {
 		t.Fatalf("Extract failed: %+v", err)
 	}
@@ -79,7 +80,7 @@ func TestHTTPExtractFlagsAndSampledOnly(t *testing.T) {
 	c.Set(zb3.Flags, "1")
 	c.Set(zb3.Sampled, "1")
 
-	sc, err := http.Propagator.Extract(c)
+	sc, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 	if err != nil {
 		t.Fatalf("Extract failed: %+v", err)
 	}
@@ -98,7 +99,7 @@ func TestHTTPExtractSampledErrors(t *testing.T) {
 	c := stdHTTP.Header{}
 	c.Set(zb3.Sampled, "2")
 
-	sc, err := http.Propagator.Extract(c)
+	sc, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidSampledHeader, err; want != have {
 		t.Errorf("SpanContext Error want %+v, have %+v", want, have)
@@ -120,7 +121,7 @@ func TestHTTPExtractFlagsErrors(t *testing.T) {
 	for value, debug := range values {
 		c := stdHTTP.Header{}
 		c.Set(zb3.Flags, value)
-		spanContext, err := http.Propagator.Extract(c)
+		spanContext, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 		if err != nil {
 			// Flags should not trigger failed extraction
 			t.Fatalf("Extract failed: %+v", err)
@@ -151,7 +152,7 @@ func TestHTTPExtractScope(t *testing.T) {
 		c := stdHTTP.Header{}
 		http.Propagator.Inject(wantContext, c)
 
-		haveContext, err := http.Propagator.Extract(c)
+		haveContext, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 		if err != nil {
 			t.Errorf("Extract failed: %+v", err)
 		}
@@ -185,7 +186,7 @@ func TestHTTPExtractTraceIDError(t *testing.T) {
 	c := stdHTTP.Header{}
 	c.Set(zb3.TraceID, "invalid_data")
 
-	_, err := http.Propagator.Extract(c)
+	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidTraceIDHeader, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -196,7 +197,7 @@ func TestHTTPExtractSpanIDError(t *testing.T) {
 	c := stdHTTP.Header{}
 	c.Set(zb3.SpanID, "invalid_data")
 
-	_, err := http.Propagator.Extract(c)
+	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidSpanIDHeader, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -207,7 +208,7 @@ func TestHTTPExtractTraceIDOnlyError(t *testing.T) {
 	c := stdHTTP.Header{}
 	c.Set(zb3.TraceID, "1")
 
-	_, err := http.Propagator.Extract(c)
+	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidScope, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -218,7 +219,7 @@ func TestHTTPExtractSpanIDOnlyError(t *testing.T) {
 	c := stdHTTP.Header{}
 	c.Set(zb3.SpanID, "1")
 
-	_, err := http.Propagator.Extract(c)
+	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidScope, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -229,7 +230,7 @@ func TestHTTPExtractParentIDOnlyError(t *testing.T) {
 	c := stdHTTP.Header{}
 	c.Set(zb3.ParentSpanID, "1")
 
-	_, err := http.Propagator.Extract(c)
+	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidScopeParent, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -242,7 +243,7 @@ func TestHTTPExtractInvalidParentIDError(t *testing.T) {
 	c.Set(zb3.SpanID, "2")
 	c.Set(zb3.ParentSpanID, "invalid_data")
 
-	_, err := http.Propagator.Extract(c)
+	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidParentSpanIDHeader, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)

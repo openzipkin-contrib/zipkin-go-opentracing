@@ -15,6 +15,8 @@
 package http
 
 import (
+	"strings"
+
 	"github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go/model"
 	zb3 "github.com/openzipkin/zipkin-go/propagation/b3"
@@ -28,18 +30,19 @@ const (
 	flagsHeader        = "x-b3-flags"
 )
 
+// Propagator exposes default B3 http propagator implementation
 var Propagator = &propagator{}
 
 type propagator struct{}
 
 func (p *propagator) Inject(sc model.SpanContext, carrier interface{}) error {
+	if (model.SpanContext{}) == sc {
+		return zb3.ErrEmptyContext
+	}
+
 	c, ok := carrier.(opentracing.TextMapWriter)
 	if !ok {
 		return opentracing.ErrInvalidCarrier
-	}
-
-	if (model.SpanContext{}) == sc {
-		return zb3.ErrEmptyContext
 	}
 
 	if !sc.TraceID.Empty() && sc.ID > 0 {
@@ -78,7 +81,8 @@ func (p *propagator) Extract(carrier interface{}) (*model.SpanContext, error) {
 	)
 
 	err := c.ForeachKey(func(key, val string) error {
-		switch key {
+		// Make header name case insensitive
+		switch strings.ToLower(key) {
 		case traceIDHeader:
 			traceID = val
 		case spanIDHeader:

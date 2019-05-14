@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openzipkin/zipkin-go"
-
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -96,24 +94,24 @@ func BenchmarkSpan_100BaggageItems(b *testing.B) {
 	benchmarkWithOps(b, 0, 0, 100)
 }
 
-func BenchmarkTrimmedSpan_100Events_100Tags_100BaggageItems(b *testing.B) {
-	var r CountingRecorder
-	t, err := NewTracer(
-		&r,
-		zipkin.WithSampler(zipkin.NeverSample),
-		zipkin.WithTraceID128Bit(true),
-	)
-	if err != nil {
-		b.Fatalf("Unable to create Tracer: %+v", err)
-	}
-	benchmarkWithOpsAndCB(b, func() opentracing.Span {
-		sp := t.StartSpan("test")
-		return sp
-	}, 100, 100, 100)
-	if int(r) != b.N {
-		b.Fatalf("missing traces: expected %d, got %d", b.N, r)
-	}
-}
+// func BenchmarkTrimmedSpan_100Events_100Tags_100BaggageItems(b *testing.B) {
+// 	var r CountingRecorder
+// 	t, err := NewTracer(
+// 		&r,
+// 		zipkin.WithSampler(zipkin.NeverSample),
+// 		zipkin.WithTraceID128Bit(true),
+// 	)
+// 	if err != nil {
+// 		b.Fatalf("Unable to create Tracer: %+v", err)
+// 	}
+// 	benchmarkWithOpsAndCB(b, func() opentracing.Span {
+// 		sp := t.StartSpan("test")
+// 		return sp
+// 	}, 100, 100, 100)
+// 	if int(r) != b.N {
+// 		b.Fatalf("missing traces: expected %d, got %d", b.N, r)
+// 	}
+// }
 
 func benchmarkInject(b *testing.B, format opentracing.BuiltinFormat, numItems int) {
 	var r CountingRecorder
@@ -188,13 +186,13 @@ func BenchmarkInject_TextMap_100BaggageItems(b *testing.B) {
 	benchmarkInject(b, opentracing.TextMap, 100)
 }
 
-func BenchmarkInject_Binary_Empty(b *testing.B) {
-	benchmarkInject(b, opentracing.Binary, 0)
-}
-
-func BenchmarkInject_Binary_100BaggageItems(b *testing.B) {
-	benchmarkInject(b, opentracing.Binary, 100)
-}
+// func BenchmarkInject_Binary_Empty(b *testing.B) {
+// 	benchmarkInject(b, opentracing.Binary, 0)
+// }
+//
+// func BenchmarkInject_Binary_100BaggageItems(b *testing.B) {
+// 	benchmarkInject(b, opentracing.Binary, 100)
+// }
 
 func BenchmarkExtract_TextMap_Empty(b *testing.B) {
 	benchmarkExtract(b, opentracing.TextMap, 0)
@@ -204,10 +202,10 @@ func BenchmarkExtract_TextMap_100BaggageItems(b *testing.B) {
 	benchmarkExtract(b, opentracing.TextMap, 100)
 }
 
-func BenchmarkExtract_Binary_Empty(b *testing.B) {
-	benchmarkExtract(b, opentracing.Binary, 0)
-}
-
-func BenchmarkExtract_Binary_100BaggageItems(b *testing.B) {
-	benchmarkExtract(b, opentracing.Binary, 100)
-}
+// func BenchmarkExtract_Binary_Empty(b *testing.B) {
+// 	benchmarkExtract(b, opentracing.Binary, 0)
+// }
+//
+// func BenchmarkExtract_Binary_100BaggageItems(b *testing.B) {
+// 	benchmarkExtract(b, opentracing.Binary, 100)
+// }

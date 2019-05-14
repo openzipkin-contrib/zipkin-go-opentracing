@@ -10,13 +10,15 @@ import (
 	"github.com/openzipkin/zipkin-go"
 )
 
-type FinisherAt interface {
-	FinishedAt(t time.Time)
+// FinisherWithDuration allows to finish span with given duration
+type FinisherWithDuration interface {
+	FinishedWithDuration(d time.Duration)
 }
 
 type spanImpl struct {
 	tracer     *tracerImpl
 	zipkinSpan zipkin.Span
+	startTime  time.Time
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
@@ -82,11 +84,11 @@ func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
 	}
 
 	if !opts.FinishTime.IsZero() {
-		f, ok := s.zipkinSpan.(FinisherAt)
+		f, ok := s.zipkinSpan.(FinisherWithDuration)
 		if !ok {
 			return
 		}
-		f.FinishedAt(opts.FinishTime)
+		f.FinishedWithDuration(opts.FinishTime.Sub(s.startTime))
 		return
 	}
 

@@ -3,6 +3,7 @@ package zipkintracer
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	b3http "github.com/openzipkin-contrib/zipkin-go-opentracing/propagation/http"
 
@@ -22,6 +23,7 @@ type tracerImpl struct {
 	propagators  map[opentracing.BuiltinFormat]propagator
 }
 
+// NewTracer returns an opentracing.Tracer interface wrapping zipkin tracer
 func NewTracer(rep reporter.Reporter, opts ...zipkin.TracerOption) (opentracing.Tracer, error) {
 	tr, err := zipkin.NewTracer(rep, opts...)
 	if err != nil {
@@ -52,9 +54,11 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 		}
 	}
 
+	startTime := time.Now()
 	// Time
 	if !startSpanOptions.StartTime.IsZero() {
 		zopts = append(zopts, zipkin.StartTime(startSpanOptions.StartTime))
+		startTime = startSpanOptions.StartTime
 	}
 
 	newSpan := t.zipkinTracer.StartSpan(operationName, zopts...)
@@ -65,6 +69,7 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 	return &spanImpl{
 		zipkinSpan: newSpan,
 		tracer:     t,
+		startTime:  startTime,
 	}
 }
 

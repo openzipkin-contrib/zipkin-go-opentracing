@@ -5,17 +5,20 @@ import (
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
 	"github.com/openzipkin/zipkin-go"
 )
 
-type FinisherAt interface {
-	FinishedAt(t time.Time)
+// FinisherWithDuration allows to finish span with given duration
+type FinisherWithDuration interface {
+	FinishedWithDuration(d time.Duration)
 }
 
 type spanImpl struct {
 	tracer     *tracerImpl
 	zipkinSpan zipkin.Span
+	startTime  time.Time
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
@@ -24,6 +27,15 @@ func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
 }
 
 func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
+	if key == string(ext.SamplingPriority) {
+		if v, ok := value.(uint16); ok {
+			sampling := v != 0
+			nc := s.zipkinSpan.Context()
+			nc.Sampled = &sampling
+			// TODO change sampling in span
+			return s
+		}
+	}
 	s.zipkinSpan.Tag(key, fmt.Sprint(value))
 	return s
 }
@@ -40,7 +52,7 @@ func (s *spanImpl) LogKV(keyValues ...interface{}) {
 }
 
 func (s *spanImpl) LogFields(fields ...log.Field) {
-	s.logFields(time.Now(), fields)
+	s.logFields(time.Now(), fields...)
 }
 
 func (s *spanImpl) logFields(t time.Time, fields ...log.Field) {
@@ -68,23 +80,23 @@ func (s *spanImpl) Finish() {
 func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
 
 	for _, lr := range opts.LogRecords {
-		s.logFields(lr.Timestamp, lr.Fields)
+		s.logFields(lr.Timestamp, lr.Fields...)
 	}
 
-	if opts.FinishTime != nil {
-		f, ok := s.zipkinSpan.(FinisherAt)
+	if !opts.FinishTime.IsZero() {
+		f, ok := s.zipkinSpan.(FinisherWithDuration)
 		if !ok {
 			return
 		}
-		f.FinishedAt(opts.FinishTime)
+		f.FinishedWithDuration(opts.FinishTime.Sub(s.startTime))
 		return
 	}
 
-	f.Finish()
+	s.Finish()
 }
 
 func (s *spanImpl) Tracer() opentracing.Tracer {
-	return s.tracerImpl
+	return s.tracer
 }
 
 func (s *spanImpl) Context() opentracing.SpanContext {

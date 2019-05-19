@@ -8,8 +8,12 @@ import (
 	"os"
 
 	opentracing "github.com/opentracing/opentracing-go"
+	zipkin "github.com/openzipkin/zipkin-go"
+	"github.com/openzipkin/zipkin-go/model"
 
-	zipkin "github.com/openzipkin-contrib/zipkin-go-opentracing"
+	zipkinopentracing "github.com/openzipkin-contrib/zipkin-go-opentracing"
+	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
+
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/examples/cli_with_2_services/svc1"
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/examples/cli_with_2_services/svc2"
 )
@@ -39,21 +43,16 @@ const (
 
 //svc1
 func main() {
-	// create collector.
-	collector, err := zipkin.NewHTTPCollector(zipkinHTTPEndpoint)
-	if err != nil {
-		fmt.Printf("unable to create Zipkin HTTP collector: %+v\n", err)
-		os.Exit(-1)
-	}
+	// Create our HTTP collector.
+	reporter := zipkinreporter.NewReporter(zipkinHTTPEndpoint)
+	defer reporter.Close()
 
-	// create recorder.
-	recorder := zipkin.NewRecorder(collector, debug, hostPort, serviceName)
-
-	// create tracer.
-	tracer, err := zipkin.NewTracer(
-		recorder,
-		zipkin.ClientServerSameSpan(sameSpan),
-		zipkin.TraceID128Bit(traceID128Bit),
+	// Create our tracer.
+	tracer, err := zipkinopentracing.NewTracer(
+		reporter,
+		zipkin.WithLocalEndpoint(&model.Endpoint{ServiceName: serviceName}),
+		zipkin.WithSharedSpans(sameSpan),
+		zipkin.WithTraceID128Bit(traceID128Bit),
 	)
 	if err != nil {
 		fmt.Printf("unable to create Zipkin tracer: %+v\n", err)

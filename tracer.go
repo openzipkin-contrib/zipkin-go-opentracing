@@ -88,16 +88,15 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 		newSpan.Tag(key, fmt.Sprint(val))
 	}
 
-	sp := &spanImpl{}
-
+	sp := &spanImpl{
+		zipkinSpan: newSpan,
+		tracer:     t,
+		startTime:  startTime,
+	}
 	if t.observer != nil {
 		observer, _ := t.observer.OnStartSpan(sp, operationName, startSpanOptions)
 		sp.observer = observer
 	}
-
-	sp.zipkinSpan = newSpan
-	sp.tracer = t
-	sp.startTime = startTime
 
 	return sp
 }

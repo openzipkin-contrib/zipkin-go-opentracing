@@ -11,8 +11,6 @@ import (
 
 	zipkinopentracing "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/examples/cli_with_2_services/svc2"
-	zipkin "github.com/openzipkin/zipkin-go"
-	"github.com/openzipkin/zipkin-go/model"
 	zipkinreporter "github.com/openzipkin/zipkin-go/reporter/http"
 )
 
@@ -45,9 +43,9 @@ func main() {
 	// Create our tracer.
 	tracer, err := zipkinopentracing.NewTracer(
 		reporter,
-		zipkin.WithLocalEndpoint(&model.Endpoint{ServiceName: serviceName}),
-		zipkin.WithSharedSpans(sameSpan),
-		zipkin.WithTraceID128Bit(traceID128Bit),
+		zipkinopentracing.WithLocalEndpoint(zipkinopentracing.Endpoint{ServiceName: serviceName}),
+		zipkinopentracing.ClientServerSameSpan(sameSpan),
+		zipkinopentracing.TraceID128Bit(traceID128Bit),
 	)
 	if err != nil {
 		fmt.Printf("unable to create Zipkin tracer: %+v\n", err)

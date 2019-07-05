@@ -7,6 +7,7 @@ import (
 
 	b3http "github.com/openzipkin-contrib/zipkin-go-opentracing/propagation/http"
 
+	otobserver "github.com/opentracing-contrib/go-observer"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/model"
@@ -21,11 +22,19 @@ type propagator interface {
 type tracerImpl struct {
 	zipkinTracer *zipkin.Tracer
 	propagators  map[opentracing.BuiltinFormat]propagator
+	observer     otobserver.Observer
 }
 
 // NewTracer returns an opentracing.Tracer interface wrapping zipkin tracer
-func NewTracer(rep reporter.Reporter, opts ...zipkin.TracerOption) (opentracing.Tracer, error) {
-	tr, err := zipkin.NewTracer(rep, opts...)
+func NewTracer(rep reporter.Reporter, opts ...TracerOption) (opentracing.Tracer, error) {
+	to := &TracerOptions{}
+	for _, o := range opts {
+		if err := o(to); err != nil {
+			return nil, err
+		}
+	}
+
+	tr, err := zipkin.NewTracer(rep, to.toZipkinTraceOptions()...)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +44,19 @@ func NewTracer(rep reporter.Reporter, opts ...zipkin.TracerOption) (opentracing.
 		propagators: map[opentracing.BuiltinFormat]propagator{
 			opentracing.TextMap: b3http.Propagator,
 		},
+		observer: to.observer,
 	}, nil
+}
+
+// Wrap receives a zipkin tracer and returns an opentracing
+// tracer
+func Wrap(tr *zipkin.Tracer) opentracing.Tracer {
+	return &tracerImpl{
+		zipkinTracer: tr,
+		propagators: map[opentracing.BuiltinFormat]propagator{
+			opentracing.TextMap: b3http.Propagator,
+		},
+	}
 }
 
 func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {
@@ -66,11 +87,19 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 	for key, val := range startSpanOptions.Tags {
 		newSpan.Tag(key, fmt.Sprint(val))
 	}
-	return &spanImpl{
-		zipkinSpan: newSpan,
-		tracer:     t,
-		startTime:  startTime,
+
+	sp := &spanImpl{}
+
+	if t.observer != nil {
+		observer, _ := t.observer.OnStartSpan(sp, operationName, startSpanOptions)
+		sp.observer = observer
 	}
+
+	sp.zipkinSpan = newSpan
+	sp.tracer = t
+	sp.startTime = startTime
+
+	return sp
 }
 
 func (t *tracerImpl) Inject(sc opentracing.SpanContext, format interface{}, carrier interface{}) error {

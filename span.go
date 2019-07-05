@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	otobserver "github.com/opentracing-contrib/go-observer"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/opentracing/opentracing-go/log"
@@ -19,14 +20,23 @@ type spanImpl struct {
 	tracer     *tracerImpl
 	zipkinSpan zipkin.Span
 	startTime  time.Time
+	observer   otobserver.SpanObserver
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
+	if s.observer != nil {
+		s.observer.OnSetOperationName(operationName)
+	}
+
 	s.zipkinSpan.SetName(operationName)
 	return s
 }
 
 func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
+	if s.observer != nil {
+		s.observer.OnSetTag(key, value)
+	}
+
 	if key == string(ext.SamplingPriority) {
 		if v, ok := value.(uint16); ok {
 			sampling := v != 0
@@ -78,6 +88,9 @@ func (s *spanImpl) Finish() {
 }
 
 func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
+	if s.observer != nil {
+		s.observer.OnFinish(opts)
+	}
 
 	for _, lr := range opts.LogRecords {
 		s.logFields(lr.Timestamp, lr.Fields...)

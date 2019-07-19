@@ -38,13 +38,9 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 	}
 
 	if key == string(ext.SamplingPriority) {
-		if v, ok := value.(uint16); ok {
-			sampling := v != 0
-			nc := s.zipkinSpan.Context()
-			nc.Sampled = &sampling
-			// TODO change sampling in span
-			return s
-		}
+		// there are no means for now to change the sampling decision
+		// but when finishedSpanHandler is in place we could change this.
+		return s
 	}
 	s.zipkinSpan.Tag(key, fmt.Sprint(value))
 	return s
@@ -72,15 +68,26 @@ func (s *spanImpl) logFields(t time.Time, fields ...log.Field) {
 }
 
 func (s *spanImpl) LogEvent(event string) {
-	// Deprecated: do nothing
+	s.Log(opentracing.LogData{
+		Event: event,
+	})
 }
 
 func (s *spanImpl) LogEventWithPayload(event string, payload interface{}) {
-	// Deprecated: do nothing
+	s.Log(opentracing.LogData{
+		Event:   event,
+		Payload: payload,
+	})
 }
 
 func (s *spanImpl) Log(ld opentracing.LogData) {
-	// Deprecated: do nothing
+	if ld.Timestamp.IsZero() {
+		ld.Timestamp = time.Now()
+	}
+
+	for _, f := range ld.ToLogRecord().Fields {
+		s.zipkinSpan.Annotate(ld.Timestamp, f.String())
+	}
 }
 
 func (s *spanImpl) Finish() {

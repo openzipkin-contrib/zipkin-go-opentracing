@@ -85,9 +85,7 @@ func (s *spanImpl) Log(ld opentracing.LogData) {
 		ld.Timestamp = time.Now()
 	}
 
-	for _, f := range ld.ToLogRecord().Fields {
-		s.zipkinSpan.Annotate(ld.Timestamp, f.String())
-	}
+	s.zipkinSpan.Annotate(ld.Timestamp, fmt.Sprintf("%s:%s", ld.Event, ld.Payload))
 }
 
 func (s *spanImpl) Finish() {

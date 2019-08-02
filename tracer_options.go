@@ -70,9 +70,9 @@ func WithLocalEndpoint(e Endpoint) TracerOption {
 }
 
 // WithSampler allows one to add a Sampler function
-func WithSampler(sampler func(traceID uint64) bool) TracerOption {
+func WithSampler(sampler Sampler) TracerOption {
 	return func(opts *TracerOptions) error {
-		opts.sampler = sampler
+		opts.sampler = zipkin.Sampler(sampler)
 		return nil
 	}
 }

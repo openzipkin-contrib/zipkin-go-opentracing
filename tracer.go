@@ -42,7 +42,8 @@ func NewTracer(rep reporter.Reporter, opts ...TracerOption) (opentracing.Tracer,
 	return &tracerImpl{
 		zipkinTracer: tr,
 		propagators: map[opentracing.BuiltinFormat]propagator{
-			opentracing.TextMap: b3http.Propagator,
+			opentracing.HTTPHeaders: b3http.Propagator,
+			opentracing.TextMap:     b3http.Propagator,
 		},
 		observer: to.observer,
 	}, nil

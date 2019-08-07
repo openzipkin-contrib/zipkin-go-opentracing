@@ -42,6 +42,17 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 		// but when finishedSpanHandler is in place we could change this.
 		return s
 	}
+
+	if key == string(ext.SpanKind) ||
+		key == string(ext.PeerService) ||
+		key == string(ext.PeerHostIPv4) ||
+		key == string(ext.PeerHostIPv6) ||
+		key == string(ext.PeerPort) {
+		// this tags are translated into kind and remoteEndpoint which can
+		// only be set on span creation
+		return s
+	}
+
 	s.zipkinSpan.Tag(key, fmt.Sprint(value))
 	return s
 }
@@ -89,6 +100,10 @@ func (s *spanImpl) Log(ld opentracing.LogData) {
 }
 
 func (s *spanImpl) Finish() {
+	if s.observer != nil {
+		s.observer.OnFinish(opentracing.FinishOptions{})
+	}
+
 	s.zipkinSpan.Finish()
 }
 

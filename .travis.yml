@@ -16,9 +16,6 @@ matrix:
       env:
         - GO111MODULE=on
 
-before_install:
-  - go get golang.org/x/tools/cmd/cover
-
 install:
   - go get -d -t ./...
   - go get -u golang.org/x/lint/golint

@@ -12,6 +12,10 @@ import (
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
+// More benchmarks can be added when extra fields propagation
+// and binary propagation is in place. See
+// https://github.com/openzipkin-contrib/zipkin-go-opentracing/blob/6ca6cf7bc4eadcb2ba7570f899b6e6dc1044eebb/bench_test.go
+
 var tags []string
 
 func init() {
@@ -46,7 +50,7 @@ func executeOps(sp opentracing.Span, numEvent, numTag, numItems int) {
 }
 
 func benchmarkWithOps(b *testing.B, numEvent, numTag, numItems int) {
-	var r CountingRecorder
+	var r CountingSender
 	t, err := NewTracer(&r)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)
@@ -90,31 +94,8 @@ func BenchmarkSpan_1000Tags(b *testing.B) {
 	benchmarkWithOps(b, 0, 1000, 0)
 }
 
-//func BenchmarkSpan_100BaggageItems(b *testing.B) {
-//	benchmarkWithOps(b, 0, 0, 100)
-//}
-
-//func BenchmarkTrimmedSpan_100Events_100Tags_100BaggageItems(b *testing.B) {
-//	var r CountingRecorder
-//	t, err := NewTracer(
-//		&r,
-//		WithSampler(zipkin.NeverSample),
-//		TraceID128Bit(true),
-//	)
-//	if err != nil {
-//		b.Fatalf("Unable to create Tracer: %+v", err)
-//	}
-//	benchmarkWithOpsAndCB(b, func() opentracing.Span {
-//		sp := t.StartSpan("test")
-//		return sp
-//	}, 100, 100, 100)
-//	if int(r) != b.N {
-//		b.Fatalf("missing traces: expected %d, got %d", b.N, r)
-//	}
-//}
-
 func benchmarkInject(b *testing.B, format opentracing.BuiltinFormat, numItems int) {
-	var r CountingRecorder
+	var r CountingSender
 	tracer, err := NewTracer(&r)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)
@@ -140,7 +121,7 @@ func benchmarkInject(b *testing.B, format opentracing.BuiltinFormat, numItems in
 }
 
 func benchmarkExtract(b *testing.B, format opentracing.BuiltinFormat, numItems int) {
-	var r CountingRecorder
+	var r CountingSender
 	tracer, err := NewTracer(&r)
 	if err != nil {
 		b.Fatalf("Unable to create Tracer: %+v", err)
@@ -186,14 +167,6 @@ func BenchmarkInject_TextMap_100BaggageItems(b *testing.B) {
 	benchmarkInject(b, opentracing.TextMap, 100)
 }
 
-// func BenchmarkInject_Binary_Empty(b *testing.B) {
-// 	benchmarkInject(b, opentracing.Binary, 0)
-// }
-//
-// func BenchmarkInject_Binary_100BaggageItems(b *testing.B) {
-// 	benchmarkInject(b, opentracing.Binary, 100)
-// }
-
 func BenchmarkExtract_TextMap_Empty(b *testing.B) {
 	benchmarkExtract(b, opentracing.TextMap, 0)
 }
@@ -201,11 +174,3 @@ func BenchmarkExtract_TextMap_Empty(b *testing.B) {
 func BenchmarkExtract_TextMap_100BaggageItems(b *testing.B) {
 	benchmarkExtract(b, opentracing.TextMap, 100)
 }
-
-// func BenchmarkExtract_Binary_Empty(b *testing.B) {
-// 	benchmarkExtract(b, opentracing.Binary, 0)
-// }
-//
-// func BenchmarkExtract_Binary_100BaggageItems(b *testing.B) {
-// 	benchmarkExtract(b, opentracing.Binary, 100)
-// }

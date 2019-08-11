@@ -143,7 +143,7 @@ func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
 			continue
 		}
 
-		tags[key] = fmt.Sprint(val)
+		tags[translateTagKey(key)] = fmt.Sprint(val)
 	}
 
 	if len(tags) > 0 {
@@ -155,6 +155,18 @@ func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
 	}
 
 	return zopts
+}
+
+var tagsTranslation = map[string]string{
+	"db.statement": "sql.query",
+}
+
+func translateTagKey(key string) string {
+	if tKey, ok := tagsTranslation[key]; ok {
+		return tKey
+	}
+
+	return key
 }
 
 func (t *tracerImpl) Inject(sc opentracing.SpanContext, format interface{}, carrier interface{}) error {

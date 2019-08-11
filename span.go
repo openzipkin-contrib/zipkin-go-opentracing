@@ -53,7 +53,7 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 		return s
 	}
 
-	s.zipkinSpan.Tag(key, fmt.Sprint(value))
+	s.zipkinSpan.Tag(translateTagKey(key), fmt.Sprint(value))
 	return s
 }
 

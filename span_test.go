@@ -22,17 +22,17 @@ func TestSpan_SingleLoggedTaggedSpan(t *testing.T) {
 	}
 
 	span := tracer.StartSpan("x")
-	span.LogEventWithPayload("event", "payload")
-	span.LogFields(log.String("key_str", "value"), log.Uint32("32bit", 4294967295))
-	span.SetTag("tag", "value")
+	span.LogEventWithPayload("key1", "{\"user\": 123}")
+	span.LogFields(log.String("key2", "value2"), log.Uint32("32bit", 4294967295))
+	span.SetTag("key3", "value3")
 	span.Finish()
 	spans := recorder.Flush()
 	assert.Equal(t, 1, len(spans))
 	assert.Equal(t, "x", spans[0].Name)
 	assert.Equal(t, 3, len(spans[0].Annotations))
-	assert.Equal(t, map[string]string{"tag": "value"}, spans[0].Tags)
-	assert.Equal(t, spans[0].Annotations[0].Value, "event:payload")
-	assert.Equal(t, spans[0].Annotations[1].Value, "key_str:value")
+	assert.Equal(t, map[string]string{"key3": "value3"}, spans[0].Tags)
+	assert.Equal(t, spans[0].Annotations[0].Value, "key1:{\"user\": 123}")
+	assert.Equal(t, spans[0].Annotations[1].Value, "key2:value2")
 	assert.Equal(t, spans[0].Annotations[2].Value, "32bit:4294967295")
 }
 

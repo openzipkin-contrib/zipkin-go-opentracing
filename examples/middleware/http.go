@@ -33,10 +33,6 @@ func ToHTTPRequest(tracer opentracing.Tracer) RequestFunc {
 			ext.HTTPMethod.Set(span, req.Method)
 			span.SetTag("span.host", req.URL.Host)
 			span.SetTag(string(zipkin.TagHTTPPath), req.URL.Path)
-			ext.HTTPUrl.Set(
-				span,
-				fmt.Sprintf("%s://%s%s", req.URL.Scheme, req.URL.Host, req.URL.Path),
-			)
 
 			// Add information on the peer service we're about to contact.
 			if host, portString, err := net.SplitHostPort(req.URL.Host); err == nil {

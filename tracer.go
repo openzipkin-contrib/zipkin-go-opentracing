@@ -3,12 +3,15 @@ package zipkintracer
 import (
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
 	b3http "github.com/openzipkin-contrib/zipkin-go-opentracing/propagation/http"
 
 	otobserver "github.com/opentracing-contrib/go-observer"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
 	"github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/model"
 	"github.com/openzipkin/zipkin-go/reporter"
@@ -83,11 +86,9 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 		startTime = startSpanOptions.StartTime
 	}
 
-	newSpan := t.zipkinTracer.StartSpan(operationName, zopts...)
+	zopts = append(zopts, parseTagsAsZipkinOptions(startSpanOptions.Tags)...)
 
-	for key, val := range startSpanOptions.Tags {
-		newSpan.Tag(key, fmt.Sprint(val))
-	}
+	newSpan := t.zipkinTracer.StartSpan(operationName, zopts...)
 
 	sp := &spanImpl{
 		zipkinSpan: newSpan,
@@ -100,6 +101,60 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 	}
 
 	return sp
+}
+
+func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
+	zopts := make([]zipkin.SpanOption, 0)
+
+	tags := map[string]string{}
+	remoteEndpoint := &model.Endpoint{}
+
+	if val, ok := t[string(ext.SpanKind)]; ok {
+		kind, _ := val.(string)
+		zopts = append(zopts, zipkin.Kind(model.Kind(strings.ToUpper(kind))))
+	}
+
+	if val, ok := t[string(ext.PeerService)]; ok {
+		serviceName, _ := val.(string)
+		remoteEndpoint.ServiceName = serviceName
+	}
+
+	if val, ok := t[string(ext.PeerHostIPv4)]; ok {
+		ipv4, _ := val.(string)
+		remoteEndpoint.IPv4 = net.ParseIP(ipv4)
+	}
+
+	if val, ok := t[string(ext.PeerHostIPv6)]; ok {
+		ipv6, _ := val.(string)
+		remoteEndpoint.IPv6 = net.ParseIP(ipv6)
+	}
+
+	if val, ok := t[string(ext.PeerPort)]; ok {
+		port, _ := val.(uint16)
+		remoteEndpoint.Port = port
+	}
+
+	for key, val := range t {
+		if key == string(ext.SpanKind) ||
+			key == string(ext.PeerService) ||
+			key == string(ext.PeerHostIPv4) ||
+			key == string(ext.PeerHostIPv6) ||
+			key == string(ext.PeerPort) {
+			continue
+		}
+
+		tags[key] = fmt.Sprint(val)
+	}
+
+	if len(tags) > 0 {
+		zopts = append(zopts, zipkin.Tags(tags))
+	}
+
+	if !remoteEndpoint.Empty() {
+		zopts = append(zopts, zipkin.RemoteEndpoint(remoteEndpoint))
+	}
+
+	return zopts
 }
 
 func (t *tracerImpl) Inject(sc opentracing.SpanContext, format interface{}, carrier interface{}) error {

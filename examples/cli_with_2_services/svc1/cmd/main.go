@@ -24,7 +24,7 @@ const (
 	hostPort = "127.0.0.1:61001"
 
 	// Endpoint to send Zipkin spans to.
-	zipkinHTTPEndpoint = "http://localhost:9411/api/v1/spans"
+	zipkinHTTPEndpoint = "http://localhost:9411/api/v2/spans"
 
 	// Debug mode.
 	debug = false

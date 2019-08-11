@@ -8,16 +8,13 @@ matrix:
     - go: "1.10.x"     
     - go: "1.11.x"
       env:
-        - GO111MODULE=on
+        - GO111MODULE=off
     - go: "1.12.x"
       env:
         - GO111MODULE=on      
     - go: "tip"
       env:
         - GO111MODULE=on
-
-before_install:
-  - go get golang.org/x/tools/cmd/cover
 
 install:
   - go get -d -t ./...

@@ -21,10 +21,11 @@ import (
 	"github.com/openzipkin-contrib/zipkin-go-opentracing/propagation/http"
 
 	"github.com/opentracing/opentracing-go"
+	"github.com/openzipkin-contrib/zipkin-go-opentracing"
 	zipkin "github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/model"
 	zb3 "github.com/openzipkin/zipkin-go/propagation/b3"
-	"github.com/openzipkin/zipkin-go/reporter/recorder"
+	"github.com/openzipkin/zipkin-go/reporter"
 )
 
 func TestHTTPExtractFlagsOnly(t *testing.T) {
@@ -132,54 +133,9 @@ func TestHTTPExtractFlagsErrors(t *testing.T) {
 	}
 }
 
-func TestHTTPExtractScope(t *testing.T) {
-	recorder := &recorder.ReporterRecorder{}
-	defer recorder.Close()
-
-	tracer, err := zipkin.NewTracer(recorder, zipkin.WithTraceID128Bit(true))
-	if err != nil {
-		t.Fatalf("Tracer failed: %+v", err)
-	}
-
-	iterations := 1000
-	for i := 0; i < iterations; i++ {
-		var (
-			parent      = tracer.StartSpan("parent")
-			child       = tracer.StartSpan("child", zipkin.Parent(parent.Context()))
-			wantContext = child.Context()
-		)
-
-		c := stdHTTP.Header{}
-		http.Propagator.Inject(wantContext, c)
-
-		haveContext, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
-		if err != nil {
-			t.Errorf("Extract failed: %+v", err)
-		}
-
-		if haveContext == nil {
-			t.Fatal("SpanContext want valid value, have nil")
-		}
-
-		if want, have := wantContext.TraceID, haveContext.TraceID; want != have {
-			t.Errorf("TraceID want %+v, have %+v", want, have)
-		}
-
-		if want, have := wantContext.ID, haveContext.ID; want != have {
-			t.Errorf("ID want %+v, have %+v", want, have)
-		}
-		if want, have := *wantContext.ParentID, *haveContext.ParentID; want != have {
-			t.Errorf("ParentID want %+v, have %+v", want, have)
-		}
-
-		child.Finish()
-		parent.Finish()
-	}
-
-	// check if we have all spans (2x the iterations: parent+child span)
-	if want, have := 2*iterations, len(recorder.Flush()); want != have {
-		t.Errorf("Recorded Span Count want %d, have %d", want, have)
-	}
+func newTracer(r reporter.Reporter, opts ...zipkin.TracerOption) opentracing.Tracer {
+	tr, _ := zipkin.NewTracer(r, opts...)
+	return zipkintracer.Wrap(tr)
 }
 
 func TestHTTPExtractTraceIDError(t *testing.T) {

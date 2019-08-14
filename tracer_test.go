@@ -3,11 +3,18 @@ package zipkintracer
 import (
 	"testing"
 
+	"github.com/openzipkin/zipkin-go/reporter"
 	"github.com/openzipkin/zipkin-go/reporter/recorder"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	zipkin "github.com/openzipkin/zipkin-go"
 )
+
+func newTracer(r reporter.Reporter, opts ...zipkin.TracerOption) opentracing.Tracer {
+	tr, _ := zipkin.NewTracer(r, opts...)
+	return Wrap(tr)
+}
 
 func TestOptionsFromOTTags(t *testing.T) {
 	tags := map[string]interface{}{}

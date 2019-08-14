@@ -14,7 +14,6 @@ import (
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/model"
-	"github.com/openzipkin/zipkin-go/reporter"
 )
 
 type propagator interface {
@@ -28,18 +27,12 @@ type tracerImpl struct {
 	observer     otobserver.Observer
 }
 
-// NewTracer returns an opentracing.Tracer interface wrapping zipkin tracer
-func NewTracer(rep reporter.Reporter, opts ...TracerOption) (opentracing.Tracer, error) {
+// Wrap receives a zipkin tracer and returns an opentracing
+// tracer
+func Wrap(tr *zipkin.Tracer, opts ...TracerOption) opentracing.Tracer {
 	to := &TracerOptions{}
 	for _, o := range opts {
-		if err := o(to); err != nil {
-			return nil, err
-		}
-	}
-
-	tr, err := zipkin.NewTracer(rep, to.toZipkinTraceOptions()...)
-	if err != nil {
-		return nil, err
+		o(to)
 	}
 
 	return &tracerImpl{
@@ -49,17 +42,6 @@ func NewTracer(rep reporter.Reporter, opts ...TracerOption) (opentracing.Tracer,
 			opentracing.TextMap:     b3http.Propagator,
 		},
 		observer: to.observer,
-	}, nil
-}
-
-// Wrap receives a zipkin tracer and returns an opentracing
-// tracer
-func Wrap(tr *zipkin.Tracer) opentracing.Tracer {
-	return &tracerImpl{
-		zipkinTracer: tr,
-		propagators: map[opentracing.BuiltinFormat]propagator{
-			opentracing.TextMap: b3http.Propagator,
-		},
 	}
 }
 

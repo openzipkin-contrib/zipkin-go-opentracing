@@ -51,10 +51,7 @@ func executeOps(sp opentracing.Span, numEvent, numTag, numItems int) {
 
 func benchmarkWithOps(b *testing.B, numEvent, numTag, numItems int) {
 	var r CountingSender
-	t, err := NewTracer(&r)
-	if err != nil {
-		b.Fatalf("Unable to create Tracer: %+v", err)
-	}
+	t := newTracer(&r)
 	benchmarkWithOpsAndCB(b, func() opentracing.Span {
 		return t.StartSpan("test")
 	}, numEvent, numTag, numItems)
@@ -96,10 +93,7 @@ func BenchmarkSpan_1000Tags(b *testing.B) {
 
 func benchmarkInject(b *testing.B, format opentracing.BuiltinFormat, numItems int) {
 	var r CountingSender
-	tracer, err := NewTracer(&r)
-	if err != nil {
-		b.Fatalf("Unable to create Tracer: %+v", err)
-	}
+	tracer := newTracer(&r)
 	sp := tracer.StartSpan("testing")
 	executeOps(sp, 0, 0, numItems)
 	var carrier interface{}
@@ -122,10 +116,7 @@ func benchmarkInject(b *testing.B, format opentracing.BuiltinFormat, numItems in
 
 func benchmarkExtract(b *testing.B, format opentracing.BuiltinFormat, numItems int) {
 	var r CountingSender
-	tracer, err := NewTracer(&r)
-	if err != nil {
-		b.Fatalf("Unable to create Tracer: %+v", err)
-	}
+	tracer := newTracer(&r)
 	sp := tracer.StartSpan("testing")
 	executeOps(sp, 0, 0, numItems)
 	var carrier interface{}

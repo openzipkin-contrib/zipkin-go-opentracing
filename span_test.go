@@ -13,13 +13,10 @@ import (
 
 func TestSpan_SingleLoggedTaggedSpan(t *testing.T) {
 	recorder := recorder.NewReporter()
-	tracer, err := NewTracer(
+	tracer := newTracer(
 		recorder,
-		WithSampler(zipkin.AlwaysSample),
+		zipkin.WithSampler(zipkin.AlwaysSample),
 	)
-	if err != nil {
-		t.Fatalf("Unable to create Tracer: %+v", err)
-	}
 
 	span := tracer.StartSpan("x")
 	span.LogEventWithPayload("key1", "{\"user\": 123}")
@@ -39,14 +36,11 @@ func TestSpan_SingleLoggedTaggedSpan(t *testing.T) {
 func TestSpan_TrimUnsampledSpans(t *testing.T) {
 	recorder := recorder.NewReporter()
 	// Tracer that trims only unsampled but always samples
-	tracer, err := NewTracer(
+	tracer := newTracer(
 		recorder,
-		WithSampler(func(_ uint64) bool { return true }),
-		TrimUnsampledSpans(true),
+		zipkin.WithSampler(func(_ uint64) bool { return true }),
+		zipkin.WithNoopSpan(true),
 	)
-	if err != nil {
-		t.Fatalf("Unable to create Tracer: %+v", err)
-	}
 
 	span := tracer.StartSpan("x")
 	span.LogFields(log.String("key_str", "value"), log.Uint32("32bit", 4294967295))
@@ -61,14 +55,11 @@ func TestSpan_TrimUnsampledSpans(t *testing.T) {
 	assert.Equal(t, spans[0].Annotations[1].Value, "32bit:4294967295")
 
 	// Tracer that trims only unsampled and never samples
-	tracer, err = NewTracer(
+	tracer = newTracer(
 		recorder,
-		WithSampler(zipkin.NeverSample),
-		TrimUnsampledSpans(true),
+		zipkin.WithSampler(zipkin.NeverSample),
+		zipkin.WithNoopSpan(true),
 	)
-	if err != nil {
-		t.Fatalf("Unable to create Tracer: %+v", err)
-	}
 
 	span = tracer.StartSpan("x")
 	span.LogFields(log.String("key_str", "value"), log.Uint32("32bit", 4294967295))
@@ -81,10 +72,7 @@ func TestSpan_TrimUnsampledSpans(t *testing.T) {
 func TestTagTranslation(t *testing.T) {
 	recorder := recorder.NewReporter()
 	// Tracer that trims only unsampled but always samples
-	tracer, err := NewTracer(recorder)
-	if err != nil {
-		t.Fatalf("Unable to create Tracer: %+v", err)
-	}
+	tracer := newTracer(recorder)
 
 	span := tracer.StartSpan("x")
 	span.SetTag("db.statement", "SELECT 1")

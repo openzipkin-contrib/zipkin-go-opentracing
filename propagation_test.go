@@ -12,16 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package http_test
+package zipkintracer_test
 
 import (
 	stdHTTP "net/http"
 	"testing"
 
-	"github.com/openzipkin-contrib/zipkin-go-opentracing/propagation/http"
-
 	"github.com/opentracing/opentracing-go"
-	"github.com/openzipkin-contrib/zipkin-go-opentracing"
+	zipkintracer "github.com/openzipkin-contrib/zipkin-go-opentracing"
 	zipkin "github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/model"
 	zb3 "github.com/openzipkin/zipkin-go/propagation/b3"
@@ -29,12 +27,18 @@ import (
 )
 
 func TestHTTPExtractFlagsOnly(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.Flags, "1")
 
-	sc, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	spanContext, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 	if err != nil {
 		t.Fatalf("Extract failed: %+v", err)
+	}
+
+	sc, ok := spanContext.(zipkintracer.SpanContext)
+	if !ok {
+		t.Fatal("Expected valid SpanContext")
 	}
 
 	if want, have := true, sc.Debug; want != have {
@@ -43,12 +47,18 @@ func TestHTTPExtractFlagsOnly(t *testing.T) {
 }
 
 func TestHTTPExtractSampledOnly(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.Sampled, "0")
 
-	sc, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	spanContext, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 	if err != nil {
 		t.Fatalf("Extract failed: %+v", err)
+	}
+
+	sc, ok := spanContext.(zipkintracer.SpanContext)
+	if !ok {
+		t.Fatal("Expected valid SpanContext")
 	}
 
 	if sc.Sampled == nil {
@@ -62,9 +72,14 @@ func TestHTTPExtractSampledOnly(t *testing.T) {
 	c = stdHTTP.Header{}
 	c.Set(zb3.Sampled, "1")
 
-	sc, err = http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	spanContext, err = tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 	if err != nil {
 		t.Fatalf("Extract failed: %+v", err)
+	}
+
+	sc, ok = spanContext.(zipkintracer.SpanContext)
+	if !ok {
+		t.Fatal("Expected valid SpanContext")
 	}
 
 	if sc.Sampled == nil {
@@ -77,13 +92,19 @@ func TestHTTPExtractSampledOnly(t *testing.T) {
 }
 
 func TestHTTPExtractFlagsAndSampledOnly(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.Flags, "1")
 	c.Set(zb3.Sampled, "1")
 
-	sc, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	spanContext, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 	if err != nil {
 		t.Fatalf("Extract failed: %+v", err)
+	}
+
+	sc, ok := spanContext.(zipkintracer.SpanContext)
+	if !ok {
+		t.Fatal("Expected valid SpanContext")
 	}
 
 	if want, have := true, sc.Debug; want != have {
@@ -97,21 +118,28 @@ func TestHTTPExtractFlagsAndSampledOnly(t *testing.T) {
 }
 
 func TestHTTPExtractSampledErrors(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.Sampled, "2")
 
-	sc, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	spanContext, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+
+	sc, ok := spanContext.(zipkintracer.SpanContext)
+	if !ok {
+		t.Fatal("Expected valid SpanContext")
+	}
 
 	if want, have := zb3.ErrInvalidSampledHeader, err; want != have {
 		t.Errorf("SpanContext Error want %+v, have %+v", want, have)
 	}
 
-	if sc != nil {
-		t.Errorf("SpanContext want nil, have: %+v", sc)
+	if sc != (zipkintracer.SpanContext{}) {
+		t.Errorf("SpanContext want empty, have: %+v", sc)
 	}
 }
 
 func TestHTTPExtractFlagsErrors(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	values := map[string]bool{
 		"1":    true,  // only acceptable Flags value, debug switches to true
 		"true": false, // true is not a valid value for Flags
@@ -122,12 +150,18 @@ func TestHTTPExtractFlagsErrors(t *testing.T) {
 	for value, debug := range values {
 		c := stdHTTP.Header{}
 		c.Set(zb3.Flags, value)
-		spanContext, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+		spanContext, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 		if err != nil {
 			// Flags should not trigger failed extraction
 			t.Fatalf("Extract failed: %+v", err)
 		}
-		if want, have := debug, spanContext.Debug; want != have {
+
+		sc, ok := spanContext.(zipkintracer.SpanContext)
+		if !ok {
+			t.Fatal("Expected valid SpanContext")
+		}
+
+		if want, have := debug, sc.Debug; want != have {
 			t.Errorf("SpanContext Error want %t, have %t", want, have)
 		}
 	}
@@ -139,10 +173,11 @@ func newTracer(r reporter.Reporter, opts ...zipkin.TracerOption) opentracing.Tra
 }
 
 func TestHTTPExtractTraceIDError(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.TraceID, "invalid_data")
 
-	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	_, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidTraceIDHeader, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -150,10 +185,11 @@ func TestHTTPExtractTraceIDError(t *testing.T) {
 }
 
 func TestHTTPExtractSpanIDError(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.SpanID, "invalid_data")
 
-	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	_, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidSpanIDHeader, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -161,10 +197,11 @@ func TestHTTPExtractSpanIDError(t *testing.T) {
 }
 
 func TestHTTPExtractTraceIDOnlyError(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.TraceID, "1")
 
-	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	_, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidScope, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -172,10 +209,11 @@ func TestHTTPExtractTraceIDOnlyError(t *testing.T) {
 }
 
 func TestHTTPExtractSpanIDOnlyError(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.SpanID, "1")
 
-	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	_, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidScope, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -183,10 +221,11 @@ func TestHTTPExtractSpanIDOnlyError(t *testing.T) {
 }
 
 func TestHTTPExtractParentIDOnlyError(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.ParentSpanID, "1")
 
-	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	_, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidScopeParent, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -194,12 +233,13 @@ func TestHTTPExtractParentIDOnlyError(t *testing.T) {
 }
 
 func TestHTTPExtractInvalidParentIDError(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	c.Set(zb3.TraceID, "1")
 	c.Set(zb3.SpanID, "2")
 	c.Set(zb3.ParentSpanID, "invalid_data")
 
-	_, err := http.Propagator.Extract(opentracing.HTTPHeadersCarrier(c))
+	_, err := tracer.Extract(opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := zb3.ErrInvalidParentSpanIDHeader, err; want != have {
 		t.Errorf("Extract Error want %+v, have %+v", want, have)
@@ -208,7 +248,8 @@ func TestHTTPExtractInvalidParentIDError(t *testing.T) {
 }
 
 func TestHTTPInjectEmptyContextError(t *testing.T) {
-	err := http.Propagator.Inject(model.SpanContext{}, nil)
+	tracer := zipkintracer.Wrap(nil)
+	err := tracer.Inject(zipkintracer.SpanContext{}, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier{})
 
 	if want, have := zb3.ErrEmptyContext, err; want != have {
 		t.Errorf("HTTPInject Error want %+v, have %+v", want, have)
@@ -216,12 +257,13 @@ func TestHTTPInjectEmptyContextError(t *testing.T) {
 }
 
 func TestHTTPInjectDebugOnly(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
-	sc := model.SpanContext{
+	sc := zipkintracer.SpanContext{
 		Debug: true,
 	}
 
-	http.Propagator.Inject(sc, c)
+	tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := "1", c.Get(zb3.Flags); want != have {
 		t.Errorf("Flags want %s, have %s", want, have)
@@ -229,14 +271,15 @@ func TestHTTPInjectDebugOnly(t *testing.T) {
 }
 
 func TestHTTPInjectSampledOnly(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 
 	sampled := false
-	sc := model.SpanContext{
+	sc := zipkintracer.SpanContext{
 		Sampled: &sampled,
 	}
 
-	http.Propagator.Inject(sc, c)
+	tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := "0", c.Get(zb3.Sampled); want != have {
 		t.Errorf("Sampled want %s, have %s", want, have)
@@ -244,15 +287,16 @@ func TestHTTPInjectSampledOnly(t *testing.T) {
 }
 
 func TestHTTPInjectUnsampledTrace(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 	sampled := false
-	sc := model.SpanContext{
+	sc := zipkintracer.SpanContext{
 		TraceID: model.TraceID{Low: 1},
 		ID:      model.ID(2),
 		Sampled: &sampled,
 	}
 
-	http.Propagator.Inject(sc, c)
+	tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := "0", c.Get(zb3.Sampled); want != have {
 		t.Errorf("Sampled want %s, have %s", want, have)
@@ -260,17 +304,18 @@ func TestHTTPInjectUnsampledTrace(t *testing.T) {
 }
 
 func TestHTTPInjectSampledAndDebugTrace(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
 	c := stdHTTP.Header{}
 
 	sampled := true
-	sc := model.SpanContext{
+	sc := zipkintracer.SpanContext{
 		TraceID: model.TraceID{Low: 1},
 		ID:      model.ID(2),
 		Debug:   true,
 		Sampled: &sampled,
 	}
 
-	http.Propagator.Inject(sc, c)
+	tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
 
 	if want, have := "", c.Get(zb3.Sampled); want != have {
 		t.Errorf("Sampled want empty, have %s", have)

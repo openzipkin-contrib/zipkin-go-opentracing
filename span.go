@@ -53,7 +53,7 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 		return s
 	}
 
-	s.zipkinSpan.Tag(translateTagKey(key), fmt.Sprint(value))
+	s.zipkinSpan.Tag(key, fmt.Sprint(value))
 	return s
 }
 
@@ -133,12 +133,10 @@ func (s *spanImpl) Tracer() opentracing.Tracer {
 }
 
 func (s *spanImpl) Context() opentracing.SpanContext {
-	return &spanContextImpl{zipkinContext: s.zipkinSpan.Context()}
-
+	return SpanContext(s.zipkinSpan.Context())
 }
 
 func (s *spanImpl) SetBaggageItem(key, val string) opentracing.Span {
-	// Do nothing for now
 	return s
 }
 

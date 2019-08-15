@@ -1,33 +1,24 @@
 package zipkintracer
 
 import (
-	"net"
-
-	"github.com/openzipkin/zipkin-go/model"
-
 	otobserver "github.com/opentracing-contrib/go-observer"
 )
 
-// Endpoint holds the network context of a node in the service graph.
-type Endpoint struct {
-	ServiceName string
-	IPv4        net.IP
-	IPv6        net.IP
-	Port        uint16
-}
+// B3InjectOption type holds information on B3 injection style when using
+// native OpenTracing HTTPHeadersCarrier.
+type B3InjectOption int
 
-func (e *Endpoint) toZipkin() *model.Endpoint {
-	return &model.Endpoint{
-		ServiceName: e.ServiceName,
-		IPv4:        e.IPv4,
-		IPv6:        e.IPv6,
-		Port:        e.Port,
-	}
-}
+// Available B3InjectOption values
+const (
+	B3InjectStandard B3InjectOption = iota
+	B3InjectSingle
+	B3InjectBoth
+)
 
 // TracerOptions allows creating a customized Tracer.
 type TracerOptions struct {
-	observer otobserver.Observer
+	observer    otobserver.Observer
+	b3InjectOpt B3InjectOption
 }
 
 // TracerOption allows for functional options.
@@ -38,5 +29,12 @@ type TracerOption func(opts *TracerOptions)
 func WithObserver(observer otobserver.Observer) TracerOption {
 	return func(opts *TracerOptions) {
 		opts.observer = observer
+	}
+}
+
+// WithB3InjectOption sets the B3 injection style if using the native OpenTracing HTTPHeadersCarrier
+func WithB3InjectOption(b3InjectOption B3InjectOption) TracerOption {
+	return func(opts *TracerOptions) {
+		opts.b3InjectOpt = b3InjectOption
 	}
 }

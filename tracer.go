@@ -1,48 +1,39 @@
 package zipkintracer
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"strings"
 	"time"
 
-	b3http "github.com/openzipkin-contrib/zipkin-go-opentracing/propagation/http"
-
-	otobserver "github.com/opentracing-contrib/go-observer"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/opentracing/opentracing-go/ext"
 	"github.com/openzipkin/zipkin-go"
 	"github.com/openzipkin/zipkin-go/model"
 )
 
-type propagator interface {
-	Inject(model.SpanContext, interface{}) error
-	Extract(interface{}) (*model.SpanContext, error)
-}
-
 type tracerImpl struct {
-	zipkinTracer *zipkin.Tracer
-	propagators  map[opentracing.BuiltinFormat]propagator
-	observer     otobserver.Observer
+	zipkinTracer       *zipkin.Tracer
+	textPropagator     *textMapPropagator
+	accessorPropagator *accessorPropagator
+	opts               *TracerOptions
 }
 
 // Wrap receives a zipkin tracer and returns an opentracing
 // tracer
 func Wrap(tr *zipkin.Tracer, opts ...TracerOption) opentracing.Tracer {
-	to := &TracerOptions{}
+	t := &tracerImpl{
+		zipkinTracer: tr,
+		opts:         &TracerOptions{},
+	}
+	t.textPropagator = &textMapPropagator{t}
+	t.accessorPropagator = &accessorPropagator{t}
+
 	for _, o := range opts {
-		o(to)
+		o(t.opts)
 	}
 
-	return &tracerImpl{
-		zipkinTracer: tr,
-		propagators: map[opentracing.BuiltinFormat]propagator{
-			opentracing.HTTPHeaders: b3http.Propagator,
-			opentracing.TextMap:     b3http.Propagator,
-		},
-		observer: to.observer,
-	}
+	return t
 }
 
 func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSpanOption) opentracing.Span {
@@ -55,9 +46,9 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 
 	// Parent
 	if len(startSpanOptions.References) > 0 {
-		parent, ok := (startSpanOptions.References[0].ReferencedContext).(*spanContextImpl)
+		parent, ok := (startSpanOptions.References[0].ReferencedContext).(*SpanContext)
 		if ok {
-			zopts = append(zopts, zipkin.Parent(parent.zipkinContext))
+			zopts = append(zopts, zipkin.Parent(model.SpanContext(*parent)))
 		}
 	}
 
@@ -77,8 +68,8 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 		tracer:     t,
 		startTime:  startTime,
 	}
-	if t.observer != nil {
-		observer, _ := t.observer.OnStartSpan(sp, operationName, startSpanOptions)
+	if t.opts.observer != nil {
+		observer, _ := t.opts.observer.OnStartSpan(sp, operationName, startSpanOptions)
 		sp.observer = observer
 	}
 
@@ -125,7 +116,7 @@ func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
 			continue
 		}
 
-		tags[translateTagKey(key)] = fmt.Sprint(val)
+		tags[key] = fmt.Sprint(val)
 	}
 
 	if len(tags) > 0 {
@@ -139,42 +130,35 @@ func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
 	return zopts
 }
 
-var tagsTranslation = map[string]string{
-	"db.statement": "sql.query",
-}
+type delegatorType struct{}
 
-func translateTagKey(key string) string {
-	if tKey, ok := tagsTranslation[key]; ok {
-		return tKey
-	}
-
-	return key
-}
+// Delegator is the format to use for DelegatingCarrier.
+var Delegator delegatorType
 
 func (t *tracerImpl) Inject(sc opentracing.SpanContext, format interface{}, carrier interface{}) error {
-	prpg, ok := t.propagators[format.(opentracing.BuiltinFormat)]
-	if !ok {
-		return opentracing.ErrUnsupportedFormat
+	switch format {
+	case opentracing.TextMap, opentracing.HTTPHeaders:
+		return t.textPropagator.Inject(sc, carrier)
+	case opentracing.Binary:
+		// try with textMapPropagator
+		return t.textPropagator.Inject(sc, carrier)
 	}
-
-	zsc, ok := sc.(*spanContextImpl)
-	if !ok {
-		return errors.New("unexpected error")
+	if _, ok := format.(delegatorType); ok {
+		return t.accessorPropagator.Inject(sc, carrier)
 	}
-
-	return prpg.Inject(zsc.zipkinContext, carrier)
+	return opentracing.ErrUnsupportedFormat
 }
 
 func (t *tracerImpl) Extract(format interface{}, carrier interface{}) (opentracing.SpanContext, error) {
-	prpg, ok := t.propagators[format.(opentracing.BuiltinFormat)]
-	if !ok {
-		return nil, opentracing.ErrUnsupportedFormat
+	switch format {
+	case opentracing.TextMap, opentracing.HTTPHeaders:
+		return t.textPropagator.Extract(carrier)
+	case opentracing.Binary:
+		// try with textMapPropagator
+		return t.textPropagator.Extract(carrier)
 	}
-
-	sc, err := prpg.Extract(carrier)
-	if err != nil {
-		return nil, err
+	if _, ok := format.(delegatorType); ok {
+		return t.accessorPropagator.Extract(carrier)
 	}
-
-	return &spanContextImpl{zipkinContext: *sc}, nil
+	return nil, opentracing.ErrUnsupportedFormat
 }

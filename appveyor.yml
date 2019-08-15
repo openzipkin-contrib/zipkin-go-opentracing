@@ -2,7 +2,7 @@ version: v1.0.0.{build}
 
 platform: x64
 
-clone_folder: c:\gopath\src\github.com\openzipkin\zipkin-go
+clone_folder: c:\gopath\src\github.com\openzipkin-contrib\zipkin-go-opentracing
 
 environment:
   GOPATH: c:\gopath
@@ -10,9 +10,6 @@ environment:
   GOFLAGS: -mod=readonly
 
 install:
-  - choco install rabbitmq --ignoredependencies -y
-  - echo %PATH%
-  - echo %GOPATH%
   - set PATH=%GOPATH%\bin;c:\go\bin;%PATH%
   - go version
   - go env

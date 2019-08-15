@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,22 +18,11 @@ import (
 var tags []string
 
 func init() {
+	rand.Seed(time.Now().UnixNano())
 	tags = make([]string, 1000)
 	for j := 0; j < len(tags); j++ {
-		tags[j] = fmt.Sprintf("%d", randomID())
+		tags[j] = fmt.Sprintf("%d", rand.Uint64())
 	}
-}
-
-var (
-	seededIDGen = rand.New(rand.NewSource(time.Now().UnixNano()))
-	// The golang rand generators are *not* intrinsically thread-safe.
-	seededIDLock sync.Mutex
-)
-
-func randomID() uint64 {
-	seededIDLock.Lock()
-	defer seededIDLock.Unlock()
-	return uint64(seededIDGen.Int63())
 }
 
 func executeOps(sp opentracing.Span, numEvent, numTag, numItems int) {

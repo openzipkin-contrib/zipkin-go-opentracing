@@ -68,17 +68,3 @@ func TestSpan_TrimUnsampledSpans(t *testing.T) {
 	spans = recorder.Flush()
 	assert.Equal(t, 0, len(spans))
 }
-
-func TestTagTranslation(t *testing.T) {
-	recorder := recorder.NewReporter()
-	// Tracer that trims only unsampled but always samples
-	tracer := newTracer(recorder)
-
-	span := tracer.StartSpan("x")
-	span.SetTag("db.statement", "SELECT 1")
-	span.SetTag("db.type", "mysql")
-	span.Finish()
-	spans := recorder.Flush()
-	assert.Equal(t, 1, len(spans))
-	assert.Equal(t, map[string]string{"sql.query": "SELECT 1", "db.type": "mysql"}, spans[0].Tags)
-}

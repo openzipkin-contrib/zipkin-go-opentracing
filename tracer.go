@@ -92,7 +92,15 @@ func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
 		default:
 			kind = fmt.Sprintf("%v", kindVal)
 		}
-		zopts = append(zopts, zipkin.Kind(model.Kind(strings.ToUpper(kind))))
+		mKind := model.Kind(strings.ToUpper(kind))
+		if mKind == model.Client ||
+			mKind == model.Server ||
+			mKind == model.Producer ||
+			mKind == model.Consumer {
+			zopts = append(zopts, zipkin.Kind(mKind))
+		} else {
+			tags["span.kind"] = kind
+		}
 	}
 
 	if val, ok := t[string(ext.PeerService)]; ok {

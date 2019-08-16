@@ -46,9 +46,9 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 
 	// Parent
 	if len(startSpanOptions.References) > 0 {
-		parent, ok := (startSpanOptions.References[0].ReferencedContext).(*SpanContext)
+		parent, ok := (startSpanOptions.References[0].ReferencedContext).(SpanContext)
 		if ok {
-			zopts = append(zopts, zipkin.Parent(model.SpanContext(*parent)))
+			zopts = append(zopts, zipkin.Parent(model.SpanContext(parent)))
 		}
 	}
 

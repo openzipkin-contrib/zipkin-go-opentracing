@@ -82,8 +82,16 @@ func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
 	tags := map[string]string{}
 	remoteEndpoint := &model.Endpoint{}
 
+	var kind string
 	if val, ok := t[string(ext.SpanKind)]; ok {
-		kind, _ := val.(string)
+		switch kindVal := val.(type) {
+		case ext.SpanKindEnum:
+			kind = string(kindVal)
+		case string:
+			kind = kindVal
+		default:
+			kind = fmt.Sprintf("%v", kindVal)
+		}
 		zopts = append(zopts, zipkin.Kind(model.Kind(strings.ToUpper(kind))))
 	}
 

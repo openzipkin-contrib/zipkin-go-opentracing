@@ -3,6 +3,7 @@ package zipkintracer
 import (
 	"testing"
 
+	"github.com/openzipkin/zipkin-go/model"
 	"github.com/openzipkin/zipkin-go/reporter"
 	"github.com/openzipkin/zipkin-go/reporter/recorder"
 
@@ -16,11 +17,32 @@ func newTracer(r reporter.Reporter, opts ...zipkin.TracerOption) opentracing.Tra
 	return Wrap(tr)
 }
 
-func TestOptionsFromOTTags(t *testing.T) {
-	tags := map[string]interface{}{}
-	tags[string(ext.SpanKind)] = "server"
-	tags[string(ext.PeerService)] = "service_a"
-	tags["key"] = "value"
+func TestOTKindTagIsParsedSuccessfuly(t *testing.T) {
+	tagCases := []map[string]interface{}{
+		{string(ext.SpanKind): "server"},
+		{"span.kind": "server"},
+		{"span.kind": ext.SpanKindRPCServerEnum},
+	}
+	for _, tags := range tagCases {
+		opts := parseTagsAsZipkinOptions(tags)
+
+		rec := recorder.NewReporter()
+		tr, _ := zipkin.NewTracer(rec)
+		sp := tr.StartSpan("test", opts...)
+		sp.Finish()
+		spans := rec.Flush()
+		if want, have := 1, len(spans); want != have {
+			t.Fatalf("unexpected number of spans, want %d, have %d", want, have)
+		}
+
+		if want, have := model.Server, spans[0].Kind; want != have {
+			t.Errorf("unexpected kind value, want %s, have %s", want, have)
+		}
+	}
+}
+
+func TestOTKindTagIsCantBeParsed(t *testing.T) {
+	tags := map[string]interface{}{"span.kind": "banana"}
 	opts := parseTagsAsZipkinOptions(tags)
 
 	rec := recorder.NewReporter()
@@ -32,8 +54,28 @@ func TestOptionsFromOTTags(t *testing.T) {
 		t.Fatalf("unexpected number of spans, want %d, have %d", want, have)
 	}
 
-	if want, have := "SERVER", string(spans[0].Kind); want != have {
-		t.Errorf("unexpected span kind, want %s, have %s", want, have)
+	if want, have := model.Undetermined, spans[0].Kind; want != have {
+		t.Errorf("unexpected kind value, want %s, have %s", want, have)
+	}
+
+	if want, have := "banana", spans[0].Tags["span.kind"]; want != have {
+		t.Errorf("unexpected tag value, want %s, have %s", want, have)
+	}
+}
+
+func TestOptionsFromOTTags(t *testing.T) {
+	tags := map[string]interface{}{}
+	tags[string(ext.PeerService)] = "service_a"
+	tags["key"] = "value"
+	opts := parseTagsAsZipkinOptions(tags)
+
+	rec := recorder.NewReporter()
+	tr, _ := zipkin.NewTracer(rec)
+	sp := tr.StartSpan("test", opts...)
+	sp.Finish()
+	spans := rec.Flush()
+	if want, have := 1, len(spans); want != have {
+		t.Fatalf("unexpected number of spans, want %d, have %d", want, have)
 	}
 
 	if want, have := "service_a", spans[0].RemoteEndpoint.ServiceName; want != have {

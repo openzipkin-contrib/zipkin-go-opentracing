@@ -16,6 +16,7 @@ package zipkintracer_test
 
 import (
 	stdHTTP "net/http"
+	"reflect"
 	"testing"
 
 	"github.com/opentracing/opentracing-go"
@@ -24,6 +25,7 @@ import (
 	"github.com/openzipkin/zipkin-go/model"
 	zb3 "github.com/openzipkin/zipkin-go/propagation/b3"
 	"github.com/openzipkin/zipkin-go/reporter"
+	"google.golang.org/grpc/metadata"
 )
 
 func TestHTTPExtractFlagsOnly(t *testing.T) {
@@ -323,5 +325,202 @@ func TestHTTPInjectSampledAndDebugTrace(t *testing.T) {
 
 	if want, have := "1", c.Get(zb3.Flags); want != have {
 		t.Errorf("Debug want %s, have %s", want, have)
+	}
+}
+
+func TestTextMapCarrier(t *testing.T) {
+	for injectOption := zipkintracer.B3InjectStandard; injectOption <= zipkintracer.B3InjectBoth; injectOption++ {
+		tracer := zipkintracer.Wrap(nil, zipkintracer.WithB3InjectOption(injectOption))
+
+		otMap := make(opentracing.TextMapCarrier)
+
+		sampled := true
+		parentID := model.ID(1)
+		sc := zipkintracer.SpanContext{
+			TraceID:  model.TraceID{Low: 1},
+			ID:       model.ID(2),
+			ParentID: &parentID,
+			Sampled:  &sampled,
+		}
+
+		tracer.Inject(sc, opentracing.TextMap, otMap)
+
+		stdMap := make(map[string]string)
+
+		otMap.ForeachKey(func(key string, val string) error {
+			stdMap[key] = val
+			return nil
+		})
+
+		otSC, err := tracer.Extract(opentracing.TextMap, otMap)
+
+		if err != nil {
+			t.Errorf("[%d] Unexpected Extract failure %v", injectOption, err)
+		}
+
+		sc2, ok := otSC.(zipkintracer.SpanContext)
+		if !ok {
+			t.Errorf("[%d] Expected valid SpanContext, got %+v", injectOption, otSC)
+		}
+
+		if want, have := sc, sc2; !reflect.DeepEqual(want, have) {
+			t.Errorf("[%d] SpanContext\nwant: %+v,\nhave: %+v", injectOption, want, have)
+		}
+	}
+}
+
+func TestHTTPHeadersCarrier(t *testing.T) {
+	for injectOption := zipkintracer.B3InjectStandard; injectOption <= zipkintracer.B3InjectBoth; injectOption++ {
+		tracer := zipkintracer.Wrap(nil, zipkintracer.WithB3InjectOption(injectOption))
+
+		otHTTPHeaders := make(opentracing.HTTPHeadersCarrier)
+
+		sampled := true
+		parentID := model.ID(1)
+		sc := zipkintracer.SpanContext{
+			TraceID:  model.TraceID{Low: 1},
+			ID:       model.ID(2),
+			ParentID: &parentID,
+			Sampled:  &sampled,
+		}
+
+		tracer.Inject(sc, opentracing.TextMap, otHTTPHeaders)
+
+		stdMap := make(map[string]string)
+
+		otHTTPHeaders.ForeachKey(func(key string, val string) error {
+			stdMap[key] = val
+			return nil
+		})
+
+		otSC, err := tracer.Extract(opentracing.TextMap, otHTTPHeaders)
+
+		if err != nil {
+			t.Errorf("[%d] Unexpected Extract failure %v", injectOption, err)
+		}
+
+		sc2, ok := otSC.(zipkintracer.SpanContext)
+		if !ok {
+			t.Errorf("[%d] Expected valid SpanContext, got %+v", injectOption, otSC)
+		}
+
+		if want, have := sc, sc2; !reflect.DeepEqual(want, have) {
+			t.Errorf("[%d] SpanContext\nwant: %+v,\nhave: %+v", injectOption, want, have)
+		}
+	}
+}
+
+func TestNativeCarrier(t *testing.T) {
+	for injectOption := zipkintracer.B3InjectStandard; injectOption <= zipkintracer.B3InjectBoth; injectOption++ {
+		tracer := zipkintracer.Wrap(nil, zipkintracer.WithB3InjectOption(injectOption))
+
+		sampled := true
+		parentID := model.ID(1)
+		sc := zipkintracer.SpanContext{
+			TraceID:  model.TraceID{Low: 1},
+			ID:       model.ID(2),
+			ParentID: &parentID,
+			Sampled:  &sampled,
+		}
+
+		nativeMD := metadata.MD{}
+
+		tracer.Inject(sc, opentracing.TextMap, zb3.InjectGRPC(&nativeMD))
+
+		otSC, err := tracer.Extract(opentracing.TextMap, zb3.ExtractGRPC(&nativeMD))
+
+		if err != nil {
+			t.Errorf("[%d] Unexpected Extract failure %v", injectOption, err)
+		}
+
+		sc2, ok := otSC.(zipkintracer.SpanContext)
+		if !ok {
+			t.Errorf("[%d] Expected valid SpanContext, got %+v", injectOption, otSC)
+		}
+
+		if want, have := sc, sc2; !reflect.DeepEqual(want, have) {
+			t.Errorf("[%d] SpanContext\nwant: %+v,\nhave: %+v", injectOption, want, have)
+		}
+	}
+}
+
+func TestBinaryFallbackPropagator(t *testing.T) {
+	for injectOption := zipkintracer.B3InjectStandard; injectOption <= zipkintracer.B3InjectBoth; injectOption++ {
+		tracer := zipkintracer.Wrap(nil, zipkintracer.WithB3InjectOption(injectOption))
+
+		otMap := make(opentracing.TextMapCarrier)
+
+		sampled := true
+		parentID := model.ID(1)
+		sc := zipkintracer.SpanContext{
+			TraceID:  model.TraceID{Low: 1},
+			ID:       model.ID(2),
+			ParentID: &parentID,
+			Sampled:  &sampled,
+		}
+
+		tracer.Inject(sc, opentracing.Binary, otMap)
+
+		otSC, err := tracer.Extract(opentracing.Binary, otMap)
+
+		if err != nil {
+			t.Errorf("[%d] Unexpected Extract failure %v", injectOption, err)
+		}
+
+		sc2, ok := otSC.(zipkintracer.SpanContext)
+		if !ok {
+			t.Errorf("[%d] Expected valid SpanContext, got %+v", injectOption, otSC)
+		}
+
+		if want, have := sc, sc2; !reflect.DeepEqual(want, have) {
+			t.Errorf("[%d] SpanContext\nwant: %+v,\nhave: %+v", injectOption, want, have)
+		}
+	}
+}
+
+type customPropagator model.SpanContext
+
+var _ zipkintracer.DelegatingCarrier = &customPropagator{}
+
+func (c *customPropagator) SetState(sc model.SpanContext) error {
+	*c = customPropagator(sc)
+	return nil
+}
+func (c *customPropagator) State() (model.SpanContext, error) {
+	return model.SpanContext(*c), nil
+}
+
+func TestAccessorPropagator(t *testing.T) {
+
+	for injectOption := zipkintracer.B3InjectStandard; injectOption <= zipkintracer.B3InjectBoth; injectOption++ {
+		tracer := zipkintracer.Wrap(nil, zipkintracer.WithB3InjectOption(injectOption))
+
+		otCustom := &customPropagator{}
+
+		sampled := true
+		parentID := model.ID(1)
+		sc := zipkintracer.SpanContext{
+			TraceID:  model.TraceID{Low: 1},
+			ID:       model.ID(2),
+			ParentID: &parentID,
+			Sampled:  &sampled,
+		}
+
+		tracer.Inject(sc, zipkintracer.Delegator, otCustom)
+
+		otSC, err := tracer.Extract(zipkintracer.Delegator, otCustom)
+
+		if err != nil {
+			t.Errorf("[%d] Unexpected Extract failure %v", injectOption, err)
+		}
+
+		sc2, ok := otSC.(zipkintracer.SpanContext)
+		if !ok {
+			t.Errorf("[%d] Expected valid SpanContext, got %+v", injectOption, otSC)
+		}
+
+		if want, have := sc, sc2; !reflect.DeepEqual(want, have) {
+			t.Errorf("[%d] SpanContext\nwant: %+v,\nhave: %+v", injectOption, want, have)
+		}
 	}
 }

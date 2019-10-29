@@ -284,7 +284,10 @@ func TestHTTPInjectSampledOnly(t *testing.T) {
 		Sampled: &sampled,
 	}
 
-	tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+	err := tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+	if err != nil {
+		t.Error(err)
+	}
 
 	if want, have := "0", c.Get(zb3.Sampled); want != have {
 		t.Errorf("Sampled want %s, have %s", want, have)
@@ -301,7 +304,10 @@ func TestHTTPInjectUnsampledTrace(t *testing.T) {
 		Sampled: &sampled,
 	}
 
-	tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+	err := tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+	if err != nil {
+		t.Error(err)
+	}
 
 	if want, have := "0", c.Get(zb3.Sampled); want != have {
 		t.Errorf("Sampled want %s, have %s", want, have)

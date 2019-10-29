@@ -265,7 +265,10 @@ func TestHTTPInjectDebugOnly(t *testing.T) {
 		Debug: true,
 	}
 
-	tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+	err := tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+	if err != nil {
+		t.Error(err)
+	}
 
 	if want, have := "1", c.Get(zb3.Flags); want != have {
 		t.Errorf("Flags want %s, have %s", want, have)
@@ -317,7 +320,10 @@ func TestHTTPInjectSampledAndDebugTrace(t *testing.T) {
 		Sampled: &sampled,
 	}
 
-	tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+	err := tracer.Inject(sc, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier(c))
+	if err != nil {
+		t.Error(err)
+	}
 
 	if want, have := "", c.Get(zb3.Sampled); want != have {
 		t.Errorf("Sampled want empty, have %s", have)
@@ -343,7 +349,10 @@ func TestTextMapCarrier(t *testing.T) {
 			Sampled:  &sampled,
 		}
 
-		tracer.Inject(sc, opentracing.TextMap, otMap)
+		err := tracer.Inject(sc, opentracing.TextMap, otMap)
+		if err != nil {
+			t.Error(err)
+		}
 
 		stdMap := make(map[string]string)
 
@@ -384,7 +393,10 @@ func TestHTTPHeadersCarrier(t *testing.T) {
 			Sampled:  &sampled,
 		}
 
-		tracer.Inject(sc, opentracing.TextMap, otHTTPHeaders)
+		err := tracer.Inject(sc, opentracing.TextMap, otHTTPHeaders)
+		if err != nil {
+			t.Error(err)
+		}
 
 		stdMap := make(map[string]string)
 
@@ -425,7 +437,10 @@ func TestNativeCarrier(t *testing.T) {
 
 		nativeMD := metadata.MD{}
 
-		tracer.Inject(sc, opentracing.TextMap, zb3.InjectGRPC(&nativeMD))
+		err := tracer.Inject(sc, opentracing.TextMap, zb3.InjectGRPC(&nativeMD))
+		if err != nil {
+			t.Error(err)
+		}
 
 		otSC, err := tracer.Extract(opentracing.TextMap, zb3.ExtractGRPC(&nativeMD))
 
@@ -459,7 +474,10 @@ func TestBinaryFallbackPropagator(t *testing.T) {
 			Sampled:  &sampled,
 		}
 
-		tracer.Inject(sc, opentracing.Binary, otMap)
+		err := tracer.Inject(sc, opentracing.Binary, otMap)
+		if err != nil {
+			t.Error(err)
+		}
 
 		otSC, err := tracer.Extract(opentracing.Binary, otMap)
 
@@ -506,7 +524,10 @@ func TestAccessorPropagator(t *testing.T) {
 			Sampled:  &sampled,
 		}
 
-		tracer.Inject(sc, zipkintracer.Delegator, otCustom)
+		err := tracer.Inject(sc, zipkintracer.Delegator, otCustom)
+		if err != nil {
+			t.Error(err)
+		}
 
 		otSC, err := tracer.Extract(zipkintracer.Delegator, otCustom)
 

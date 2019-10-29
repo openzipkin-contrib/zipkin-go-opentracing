@@ -73,6 +73,7 @@ func (p *textMapPropagator) Inject(
 		for k, v := range m {
 			carrier.Set(k, v)
 		}
+		return nil
 	}
 
 	return opentracing.ErrInvalidCarrier

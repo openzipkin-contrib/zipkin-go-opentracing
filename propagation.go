@@ -61,15 +61,23 @@ func (p *textMapPropagator) Inject(
 	}
 	// fallback to support native opentracing textmap writer
 	if carrier, ok := opaqueCarrier.(opentracing.TextMapWriter); ok {
-		m := make(b3.Map)
+		var (
+			err error
+			m   = make(b3.Map)
+		)
 		switch p.tracer.opts.b3InjectOpt {
 		case B3InjectSingle:
-			m.Inject(b3.WithSingleHeaderOnly())(model.SpanContext(sc))
+			err = m.Inject(b3.WithSingleHeaderOnly())(model.SpanContext(sc))
 		case B3InjectBoth:
-			m.Inject(b3.WithSingleAndMultiHeader())(model.SpanContext(sc))
+			err = m.Inject(b3.WithSingleAndMultiHeader())(model.SpanContext(sc))
 		default:
-			m.Inject()(model.SpanContext(sc))
+			err = m.Inject()(model.SpanContext(sc))
 		}
+
+		if err != nil {
+			return err
+		}
+
 		for k, v := range m {
 			carrier.Set(k, v)
 		}

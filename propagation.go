@@ -110,7 +110,8 @@ func (p *textMapPropagator) Extract(
 		m := make(b3.Map)
 		carrier.ForeachKey(func(key string, val string) error {
 			// no matter the format of the B3 headers, they will be retrieved
-			// using the standard lowercase format e.g. x-b3-traceid
+			// using the standard lowercase format e.g. x-b3-traceid. See
+			// https://github.com/openzipkin/zipkin-go/blob/master/propagation/b3/shared.go
 			m[strings.ToLower(key)] = val
 			return nil
 		})

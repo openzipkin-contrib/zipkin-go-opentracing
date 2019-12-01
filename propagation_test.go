@@ -15,6 +15,7 @@
 package zipkintracer_test
 
 import (
+	"net/http"
 	stdHTTP "net/http"
 	"reflect"
 	"testing"
@@ -249,6 +250,47 @@ func TestHTTPExtractInvalidParentIDError(t *testing.T) {
 
 }
 
+// httpHeadersCarrier implements opentracing.TextMapReader
+type httpHeadersCarrier http.Header
+
+func (c httpHeadersCarrier) Set(key, val string) {
+	h := http.Header(c)
+	h.Set(key, val)
+}
+
+func (c httpHeadersCarrier) ForeachKey(handler func(key, val string) error) error {
+	for k, vals := range c {
+		for _, v := range vals {
+			if err := handler(k, v); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func TestTextMapReaderIsCaseInsensitive(t *testing.T) {
+	tracer := zipkintracer.Wrap(nil)
+	c := stdHTTP.Header{}
+	c.Set("X-B3-Traceid", "1")
+	c.Set("X-B3-Spanid", "2")
+
+	sc, err := tracer.Extract(opentracing.HTTPHeaders, httpHeadersCarrier(c))
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	zsc, _ := sc.(zipkintracer.SpanContext)
+	if want, have := "0000000000000001", zsc.TraceID.String(); want != have {
+		t.Errorf("Extract Error want %+v, have %+v", want, have)
+	}
+
+	if want, have := "0000000000000002", zsc.ID.String(); want != have {
+		t.Errorf("Extract Error want %+v, have %+v", want, have)
+	}
+
+}
+
 func TestHTTPInjectEmptyContextError(t *testing.T) {
 	tracer := zipkintracer.Wrap(nil)
 	err := tracer.Inject(zipkintracer.SpanContext{}, opentracing.HTTPHeaders, opentracing.HTTPHeadersCarrier{})
@@ -368,7 +410,6 @@ func TestTextMapCarrier(t *testing.T) {
 		})
 
 		otSC, err := tracer.Extract(opentracing.TextMap, otMap)
-
 		if err != nil {
 			t.Errorf("[%d] Unexpected Extract failure %v", injectOption, err)
 		}

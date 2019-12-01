@@ -16,6 +16,7 @@ package zipkintracer
 
 import (
 	"net/http"
+	"strings"
 
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/openzipkin/zipkin-go/model"
@@ -108,7 +109,9 @@ func (p *textMapPropagator) Extract(
 	if carrier, ok := opaqueCarrier.(opentracing.TextMapReader); ok {
 		m := make(b3.Map)
 		carrier.ForeachKey(func(key string, val string) error {
-			m[key] = val
+			// no matter the format of the B3 headers, they will be retrieved
+			// using the standard lowercase format e.g. x-b3-traceid
+			m[strings.ToLower(key)] = val
 			return nil
 		})
 		sc, err := m.Extract()

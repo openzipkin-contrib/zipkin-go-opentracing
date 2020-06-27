@@ -31,8 +31,9 @@ const (
 
 // TracerOptions allows creating a customized Tracer.
 type TracerOptions struct {
-	observer    otobserver.Observer
-	b3InjectOpt B3InjectOption
+	observer       otobserver.Observer
+	b3InjectOpt    B3InjectOption
+	zipkinObserver ZipkinObserver
 }
 
 // TracerOption allows for functional options.
@@ -43,6 +44,13 @@ type TracerOption func(opts *TracerOptions)
 func WithObserver(observer otobserver.Observer) TracerOption {
 	return func(opts *TracerOptions) {
 		opts.observer = observer
+	}
+}
+
+// WithZipkinObserver assigns an initialized zipkin observer to opts.zipkinObserver
+func WithZipkinObserver(zipkinObserver ZipkinObserver) TracerOption {
+	return func(opts *TracerOptions) {
+		opts.zipkinObserver = zipkinObserver
 	}
 }
 

@@ -58,43 +58,47 @@ func (t *tracerImpl) StartSpan(operationName string, opts ...opentracing.StartSp
 
 	zopts := make([]zipkin.SpanOption, 0)
 
+	sp := &spanImpl{
+		tracer: t,
+	}
+
 	// Parent
 	if len(startSpanOptions.References) > 0 {
 		parent, ok := (startSpanOptions.References[0].ReferencedContext).(SpanContext)
 		if ok {
 			zopts = append(zopts, zipkin.Parent(model.SpanContext(parent)))
+			sp.options.Parent = (*model.SpanContext)(&parent)
 		}
 	}
 
-	startTime := time.Now()
 	// Time
+	sp.options.StartTime = time.Now()
 	if !startSpanOptions.StartTime.IsZero() {
-		zopts = append(zopts, zipkin.StartTime(startSpanOptions.StartTime))
-		startTime = startSpanOptions.StartTime
+		sp.options.StartTime = startSpanOptions.StartTime
+		zopts = append(zopts, zipkin.StartTime(sp.options.StartTime))
 	}
 
-	zopts = append(zopts, parseTagsAsZipkinOptions(startSpanOptions.Tags)...)
+	zopts = append(zopts, parseTagsAsZipkinOptions(startSpanOptions.Tags, &sp.options)...)
 
-	newSpan := t.zipkinTracer.StartSpan(operationName, zopts...)
+	sp.zipkinSpan = t.zipkinTracer.StartSpan(operationName, zopts...)
 
-	sp := &spanImpl{
-		zipkinSpan: newSpan,
-		tracer:     t,
-		startTime:  startTime,
-	}
 	if t.opts.observer != nil {
 		observer, _ := t.opts.observer.OnStartSpan(sp, operationName, startSpanOptions)
 		sp.observer = observer
 	}
 
+	if t.opts.zipkinObserver != nil {
+		sp.zipkinObserver = t.opts.zipkinObserver.OnStartSpan(sp.zipkinSpan, operationName, &sp.options)
+	}
+
 	return sp
 }
 
-func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
+func parseTagsAsZipkinOptions(t map[string]interface{}, options *ZipkinStartSpanOptions) []zipkin.SpanOption {
 	zopts := make([]zipkin.SpanOption, 0)
 
-	tags := map[string]string{}
-	remoteEndpoint := &model.Endpoint{}
+	options.Tags = map[string]string{}
+	options.RemoteEndpoint = &model.Endpoint{}
 
 	var kind string
 	if val, ok := t[string(ext.SpanKind)]; ok {
@@ -112,29 +116,30 @@ func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
 			mKind == model.Producer ||
 			mKind == model.Consumer {
 			zopts = append(zopts, zipkin.Kind(mKind))
+			options.Kind = mKind
 		} else {
-			tags["span.kind"] = kind
+			options.Tags["span.kind"] = kind
 		}
 	}
 
 	if val, ok := t[string(ext.PeerService)]; ok {
 		serviceName, _ := val.(string)
-		remoteEndpoint.ServiceName = serviceName
+		options.RemoteEndpoint.ServiceName = serviceName
 	}
 
 	if val, ok := t[string(ext.PeerHostIPv4)]; ok {
 		ipv4, _ := val.(string)
-		remoteEndpoint.IPv4 = net.ParseIP(ipv4)
+		options.RemoteEndpoint.IPv4 = net.ParseIP(ipv4)
 	}
 
 	if val, ok := t[string(ext.PeerHostIPv6)]; ok {
 		ipv6, _ := val.(string)
-		remoteEndpoint.IPv6 = net.ParseIP(ipv6)
+		options.RemoteEndpoint.IPv6 = net.ParseIP(ipv6)
 	}
 
 	if val, ok := t[string(ext.PeerPort)]; ok {
 		port, _ := val.(uint16)
-		remoteEndpoint.Port = port
+		options.RemoteEndpoint.Port = port
 	}
 
 	for key, val := range t {
@@ -146,15 +151,15 @@ func parseTagsAsZipkinOptions(t map[string]interface{}) []zipkin.SpanOption {
 			continue
 		}
 
-		tags[key] = fmt.Sprint(val)
+		options.Tags[key] = fmt.Sprint(val)
 	}
 
-	if len(tags) > 0 {
-		zopts = append(zopts, zipkin.Tags(tags))
+	if len(options.Tags) > 0 {
+		zopts = append(zopts, zipkin.Tags(options.Tags))
 	}
 
-	if !remoteEndpoint.Empty() {
-		zopts = append(zopts, zipkin.RemoteEndpoint(remoteEndpoint))
+	if !options.RemoteEndpoint.Empty() {
+		zopts = append(zopts, zipkin.RemoteEndpoint(options.RemoteEndpoint))
 	}
 
 	return zopts

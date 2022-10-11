@@ -10,10 +10,9 @@ matrix:
 
 install:
   - go get -d -t ./...
-  - go install golang.org/x/lint/golint
 
 script:
-  - make test vet lint bench
+  - make test vet bench
 
 notifications:
   webhooks:

@@ -16,6 +16,7 @@ package zipkintracer
 
 import (
 	"fmt"
+	"net"
 	"time"
 
 	otobserver "github.com/opentracing-contrib/go-observer"
@@ -25,21 +26,21 @@ import (
 	"github.com/openzipkin/zipkin-go"
 )
 
-// FinisherWithDuration allows to finish span with given duration
-type FinisherWithDuration interface {
-	FinishedWithDuration(d time.Duration)
-}
-
 type spanImpl struct {
-	tracer     *tracerImpl
-	zipkinSpan zipkin.Span
-	startTime  time.Time
-	observer   otobserver.SpanObserver
+	tracer         *tracerImpl
+	zipkinSpan     zipkin.Span
+	observer       otobserver.SpanObserver
+	zipkinObserver ZipkinSpanObserver
+	options        ZipkinStartSpanOptions
 }
 
 func (s *spanImpl) SetOperationName(operationName string) opentracing.Span {
 	if s.observer != nil {
 		s.observer.OnSetOperationName(operationName)
+	}
+
+	if s.zipkinObserver != nil {
+		s.zipkinObserver.OnSetName(operationName)
 	}
 
 	s.zipkinSpan.SetName(operationName)
@@ -51,23 +52,52 @@ func (s *spanImpl) SetTag(key string, value interface{}) opentracing.Span {
 		s.observer.OnSetTag(key, value)
 	}
 
-	if key == string(ext.SamplingPriority) {
+	endpointChanged := false
+
+	switch key {
+	case string(ext.SamplingPriority):
 		// there are no means for now to change the sampling decision
 		// but when finishedSpanHandler is in place we could change this.
 		return s
+	case string(ext.SpanKind):
+		// this tag is translated into kind which can
+		// only be set on span creation
+		return s
+	case string(ext.PeerService):
+		serviceName, _ := value.(string)
+		s.options.RemoteEndpoint.ServiceName = serviceName
+		endpointChanged = true
+	case string(ext.PeerHostIPv4):
+		ipv4, _ := value.(string)
+		s.options.RemoteEndpoint.IPv4 = net.ParseIP(ipv4)
+		endpointChanged = true
+	case string(ext.PeerHostIPv6):
+		ipv6, _ := value.(string)
+		s.options.RemoteEndpoint.IPv6 = net.ParseIP(ipv6)
+		endpointChanged = true
+	case string(ext.PeerPort):
+		port, _ := value.(uint16)
+		s.options.RemoteEndpoint.Port = port
+		endpointChanged = true
 	}
 
-	if key == string(ext.SpanKind) ||
-		key == string(ext.PeerService) ||
-		key == string(ext.PeerHostIPv4) ||
-		key == string(ext.PeerHostIPv6) ||
-		key == string(ext.PeerPort) {
-		// this tags are translated into kind and remoteEndpoint which can
-		// only be set on span creation
+	if endpointChanged {
+		s.zipkinSpan.SetRemoteEndpoint(s.options.RemoteEndpoint)
+
+		if s.zipkinObserver != nil {
+			s.zipkinObserver.OnSetRemoteEndpoint(s.options.RemoteEndpoint)
+		}
+
 		return s
 	}
 
-	s.zipkinSpan.Tag(key, fmt.Sprint(value))
+	strValue := fmt.Sprint(value)
+
+	if s.zipkinObserver != nil {
+		s.zipkinObserver.OnSetTag(key, strValue)
+	}
+
+	s.zipkinSpan.Tag(key, strValue)
 	return s
 }
 
@@ -78,7 +108,14 @@ func (s *spanImpl) LogKV(keyValues ...interface{}) {
 	}
 
 	for _, field := range fields {
-		s.zipkinSpan.Annotate(time.Now(), field.String())
+		t := time.Now()
+		fieldValue := field.String()
+
+		if s.zipkinObserver != nil {
+			s.zipkinObserver.OnAnnotate(t, fieldValue)
+		}
+
+		s.zipkinSpan.Annotate(t, fieldValue)
 	}
 }
 
@@ -88,7 +125,13 @@ func (s *spanImpl) LogFields(fields ...log.Field) {
 
 func (s *spanImpl) logFields(t time.Time, fields ...log.Field) {
 	for _, field := range fields {
-		s.zipkinSpan.Annotate(t, field.String())
+		annotation := field.String()
+
+		if s.zipkinObserver != nil {
+			s.zipkinObserver.OnAnnotate(t, annotation)
+		}
+
+		s.zipkinSpan.Annotate(t, annotation)
 	}
 }
 
@@ -110,12 +153,22 @@ func (s *spanImpl) Log(ld opentracing.LogData) {
 		ld.Timestamp = time.Now()
 	}
 
-	s.zipkinSpan.Annotate(ld.Timestamp, fmt.Sprintf("%s:%s", ld.Event, ld.Payload))
+	annotation := fmt.Sprintf("%s:%s", ld.Event, ld.Payload)
+
+	if s.zipkinObserver != nil {
+		s.zipkinObserver.OnAnnotate(ld.Timestamp, annotation)
+	}
+
+	s.zipkinSpan.Annotate(ld.Timestamp, annotation)
 }
 
 func (s *spanImpl) Finish() {
 	if s.observer != nil {
 		s.observer.OnFinish(opentracing.FinishOptions{})
+	}
+
+	if s.zipkinObserver != nil {
+		s.zipkinObserver.OnFinish()
 	}
 
 	s.zipkinSpan.Finish()
@@ -131,15 +184,21 @@ func (s *spanImpl) FinishWithOptions(opts opentracing.FinishOptions) {
 	}
 
 	if !opts.FinishTime.IsZero() {
-		f, ok := s.zipkinSpan.(FinisherWithDuration)
-		if !ok {
-			return
+		dur := opts.FinishTime.Sub(s.options.StartTime)
+
+		if s.zipkinObserver != nil {
+			s.zipkinObserver.OnFinishedWithDuration(dur)
 		}
-		f.FinishedWithDuration(opts.FinishTime.Sub(s.startTime))
+
+		s.zipkinSpan.FinishedWithDuration(dur)
 		return
 	}
 
-	s.Finish()
+	if s.zipkinObserver != nil {
+		s.zipkinObserver.OnFinish()
+	}
+
+	s.zipkinSpan.Finish()
 }
 
 func (s *spanImpl) Tracer() opentracing.Tracer {
